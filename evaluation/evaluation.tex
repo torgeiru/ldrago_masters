@@ -1,0 +1,605 @@
+% ============================================================
+%  Evaluation & Conclusion – IncludeOS VirtioFS
+%  Master's Thesis
+% ============================================================
+
+\section{Evaluation}
+\label{sec:evaluation}
+
+This section presents the experimental evaluation of the VirtioFS
+implementation for IncludeOS.  Three research questions are investigated
+through a set of controlled microbenchmarks and an end-to-end application
+workload.  Section~\ref{sec:setup} describes the common infrastructure
+shared by all experiments.  Sections~\ref{sec:rq1}–\ref{sec:rq3} then
+present the setup, results, and analysis for each research question in
+turn.
+
+% -------------------------------------------------------------------
+\subsection{Experimental Setup}
+\label{sec:setup}
+
+\subsubsection{Virtual-Machine Infrastructure}
+
+All experiments are executed inside virtual machines managed by QEMU/KVM
+on the same host workstation, ensuring that CPU microarchitecture and
+memory topology are constant across every run.  A shared host directory
+is exposed to the guest through VirtioFS, the primary transport under
+evaluation; no virtual block device is involved.  The host directory
+itself is mounted on a \texttt{tmpfs} ramdisk so that host-side storage
+latency and caching effects are eliminated from the measurements.
+
+Two guest operating environments are used:
+
+\begin{description}
+  \item[IncludeOS guest.]  The IncludeOS unikernel is launched directly
+    by the \texttt{boot} utility (part of the IncludeOS toolchain), which
+    invokes \texttt{qemu-system-x86\_64} with hardware-virtualisation
+    (\texttt{-enable-kvm}) and 3\,GiB of memory.  No full operating
+    system is present: the benchmark binary \emph{is} the unikernel image,
+    linked with the IncludeOS runtime and its VirtioFS driver.  The
+    VirtioFS device is configured directly through a JSON configuration
+    file passed to \texttt{boot}.
+
+  \item[Linux guest.]  An Ubuntu 24.04 server image runs inside QEMU with
+    KVM enabled, 8\,GiB of memory, and four virtual CPUs (\texttt{-smp 4}).
+    Host memory is allocated via \texttt{memfd} and shared with the guest
+    (\texttt{memory-backend-memfd, share=on}).  The VirtioFS device is
+    backed by the userspace \texttt{virtiofsd} daemon
+    (\texttt{vhost-user-fs-pci}), launched on the host before QEMU starts.
+    \texttt{virtiofsd} is configured with direct I/O
+    (\texttt{-{}-allow-direct-io}) and caching disabled
+    (\texttt{-{}-cache never}) to prevent daemon-side buffering from
+    masking driver latency.
+\end{description}
+
+Two distinct notification mechanisms are exercised in the IncludeOS
+experiments:
+
+\begin{description}
+  \item[Polling.]  After submitting a request to the VirtioFS virtqueue,
+    the IncludeOS driver busy-polls the used-ring descriptor until the
+    host returns a completion.  No interrupt is taken; the vCPU never
+    halts.
+
+  \item[IRQ (MSI-X).]  After submission, the vCPU executes a \texttt{HLT}
+    instruction and sleeps until a MSI-X interrupt from the VirtioFS
+    device signals completion.  This frees the vCPU for other work but
+    introduces interrupt-delivery latency on every I/O.
+\end{description}
+
+\subsubsection{Reproducible Builds with Nix}
+
+All benchmark programs are compiled with the Nix package manager to
+guarantee bit-for-bit reproducibility across machines.  A top-level
+\texttt{shell.nix} provides the build environment and runtime
+dependencies—including \texttt{virtiofsd}, QEMU, GRUB, and the IncludeOS
+VM-runner utility—through a single \texttt{nix-shell} invocation.
+
+IncludeOS unikernel binaries are built with
+\texttt{includeos.stdenv.mkDerivation}; the resulting
+\texttt{virtiofs\_bench.elf.bin} ELF image is passed directly to the
+\texttt{boot} launcher.  Linux binaries are compiled with the
+\texttt{pkgsMusl} static C library toolchain to minimise runtime
+dependencies and prevent dynamic linker behaviour from confounding
+results.  The C++20 standard is required by all benchmarks for
+\texttt{std::format} and \texttt{std::chrono::high\_resolution\_clock}.
+
+The orchestration script \texttt{run\_bench.sh} automates the full
+workflow: it mounts the shared \texttt{tmpfs}, copies benchmark material
+into it, invokes the appropriate Nix build, starts the virtual machine,
+waits for it to finish, copies CSV result files back to the host, and
+cleans up.
+
+% -------------------------------------------------------------------
+\subsubsection{POSIX I/O Benchmark (Experiments 1 \& 2)}
+\label{sec:posix_setup}
+
+The synchronous-I/O benchmark exercises VirtioFS through the standard
+POSIX file API (\texttt{open}/\texttt{read}/\texttt{write}/\texttt{lseek}/\texttt{close}).
+In IncludeOS this translates directly into driver calls with no kernel
+syscall boundary; in Linux the calls traverse the VFS and FUSE layers
+before reaching the \texttt{virtiofsd}-backed driver.
+
+\paragraph{Test file.}  A 204.8\,MiB binary file
+(\texttt{syncio\_testing\_file.bin}) pre-placed on the shared
+\texttt{tmpfs} serves as the read source.  Write benchmarks create a
+fresh output file on each run and remove it afterwards to prevent caching
+warm-up from propagating across runs.  Files are opened with
+\texttt{O\_DIRECT} to bypass the page cache, ensuring that all data
+transfers reach the VirtioFS transport layer.
+
+\paragraph{Chunk sweep.}  The benchmark iterates over chunk sizes from
+8\,KiB to 248\,KiB in steps of 8\,KiB (31 sizes).  For each chunk size
+30 independent runs are executed.  Four access patterns are measured:
+\emph{sequential read}, \emph{sequential write}, \emph{random read}, and
+\emph{random write}.  The random benchmarks permute chunk indices with a
+fixed seed (Mersenne Twister, seed 42) so that the same access order is
+reproduced in every run.
+
+\paragraph{Timing.}  Each run is timed with
+\texttt{std::chrono::high\_resolution\_clock}, wrapping the innermost
+processing loop.  File open and close operations are excluded.  The result
+is recorded as elapsed time in milliseconds and as throughput in
+mebibytes per second (MiB/s), computed as $\text{filesize} /
+\text{elapsed}$.
+
+\paragraph{Result files.}  Four CSV files are written to the shared
+VirtioFS directory (\texttt{seq\_read\_bench.csv},
+\texttt{seq\_write\_bench.csv}, \texttt{rng\_read\_bench.csv},
+\texttt{rng\_write\_bench.csv}).  Each row contains
+\texttt{chunk\_size}, \texttt{run\_number}, \texttt{time\_ms}, and
+\texttt{throughput\_mibps}.
+
+\paragraph{Verification.} With the \texttt{VERIFY} compile-time flag
+enabled, the benchmark writes the final read buffer and write buffer back
+to the shared directory as \texttt{*\_copy.bin} files.  These can be
+compared with the original \texttt{syncio\_testing\_file.bin} via SHA-256
+to confirm data integrity across all driver paths.
+
+% -------------------------------------------------------------------
+\subsubsection{io\_uring Benchmark (Experiment 3)}
+\label{sec:iouring_setup}
+
+The io\_uring benchmark uses the same access patterns and file sizes as
+the POSIX benchmark but replaces the synchronous system calls with the
+\texttt{liburing} asynchronous interface configured with the
+\texttt{IORING\_SETUP\_SQPOLL} flag.  SQPOLL spawns a kernel thread that
+polls the submission queue without requiring a \texttt{io\_uring\_enter}
+system call from the application, theoretically reducing syscall overhead
+at high submission rates.  The submission queue depth is set to 1; a
+single outstanding I/O is submitted and waited upon before the next is
+issued, matching the serialised access pattern of the POSIX benchmark and
+making throughput comparisons directly meaningful.  This benchmark runs
+only on Linux; IncludeOS does not support io\_uring.
+
+% -------------------------------------------------------------------
+\subsubsection{c63 Video Decoder Benchmark}
+\label{sec:c63dec_setup}
+
+The c63 codec is a simplified MPEG-style video codec developed for
+educational purposes.  The decoder \texttt{c63dec} reads a compressed
+\texttt{.c63} file from the VirtioFS-mounted directory and writes the
+decoded raw YUV frames back to the same directory, exercising both the
+read and write paths of the VirtioFS driver under a realistic,
+compute-bound workload.
+
+The input file is a 51-frame WWE broadcast stream (\texttt{wwe.c63}) of
+limited resolution; the file is pre-copied to the shared \texttt{tmpfs}.
+The entire decode-and-write sequence is timed with
+\texttt{std::chrono::high\_resolution\_clock} and repeated 30 times per
+system configuration.  Run~0 is treated as a cold-start observation and
+excluded from statistical analysis; runs~1–29 are used to compute means
+and confidence intervals.
+
+Three system configurations are compared: Linux, IncludeOS Polling, and
+IncludeOS IRQ.  The IncludeOS build uses the same Nix derivation as the
+POSIX benchmark but without the \texttt{-DCMAKE\_CXX\_STANDARD} flag
+override (the C++20 standard is implied by IncludeOS's default
+toolchain).  The Linux build uses the \texttt{pkgsMusl} static toolchain.
+
+% -------------------------------------------------------------------
+\subsection{RQ1 – VirtioFS Throughput: IncludeOS vs.\ Linux}
+\label{sec:rq1}
+
+\textbf{RQ1:} \emph{Can a VirtioFS implementation in IncludeOS have a
+higher I/O throughput than Linux?}
+
+\subsubsection{Results}
+
+Figure~\ref{fig:rq1_combined} shows the mean throughput (with 95\%
+confidence intervals as shaded bands) across all 31 chunk sizes for the
+four access patterns, comparing Linux POSIX, IncludeOS Polling, and
+IncludeOS IRQ.  Figure~\ref{fig:rq1_peak} summarises peak throughput as
+a bar chart.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{plots/rq1_combined.pdf}
+  \caption{RQ1 – Mean VirtioFS throughput (MiB/s) vs.\ chunk size for
+    all four access patterns.  Shaded bands represent 95\% confidence
+    intervals over 30 runs.}
+  \label{fig:rq1_combined}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{plots/rq1_peak_bar.pdf}
+  \caption{RQ1 – Peak throughput comparison for sequential (left) and
+    random (right) I/O across the three system configurations.}
+  \label{fig:rq1_peak}
+\end{figure}
+
+\paragraph{IncludeOS Polling vs.\ Linux POSIX.}
+IncludeOS Polling achieves the highest throughput across every access
+pattern and chunk size.  At peak (248\,KiB chunks for reads, around
+192--248\,KiB for writes), it sustains
+\textbf{4{,}786\,MiB/s} for sequential reads and
+\textbf{2{,}076\,MiB/s} for sequential writes—representing speedups of
+$\times$\textbf{1.74} and $\times$\textbf{1.84} over the Linux POSIX
+baseline respectively.  Random access exhibits nearly identical relative
+gains: $\times$1.78 for random reads and $\times$1.83 for random writes.
+
+The advantage is even more pronounced at small chunk sizes, where system
+call and interrupt overhead dominate.  At 8\,KiB chunks, IncludeOS
+Polling delivers \textbf{804\,MiB/s} for sequential reads against only
+\textbf{266\,MiB/s} for Linux POSIX—a $\times$\textbf{3.02} speedup.
+This highlights how the elimination of the kernel-mode/user-mode
+transition, the VFS dispatch, and the FUSE/\texttt{virtiofsd} round-trip
+dramatically reduces per-request latency when requests are frequent and
+small.
+
+\paragraph{IncludeOS IRQ vs.\ Linux POSIX.}
+IncludeOS IRQ outperforms Linux POSIX across the entire chunk range, but
+by a narrower margin than polling.  Peak sequential read throughput
+reaches \textbf{3{,}454\,MiB/s} ($\times$1.26 over Linux POSIX), and
+peak sequential write reaches \textbf{1{,}696\,MiB/s} ($\times$1.50).
+At 8\,KiB chunks the IRQ mode achieves $\times$1.24 over Linux for
+sequential reads—substantially better than Linux but well below polling's
+$\times$3.02.
+
+The performance gap between IRQ and Polling within IncludeOS is itself
+instructive.  Polling outperforms IRQ by $\times$1.39 at peak sequential
+read and $\times$1.22 at peak sequential write.  This gap is attributable
+to the round-trip cost of MSI-X delivery: after every \texttt{HLT}, the
+vCPU must be woken from its halted state by the hypervisor before
+execution can resume, a path that involves an exit from the guest,
+interrupt injection, and a re-entry—all at a cost invisible to the
+polling driver, which simply spins in user space.
+
+\paragraph{Throughput scaling with chunk size.}
+All three systems exhibit a consistent pattern: throughput rises steeply
+from 8\,KiB and plateaus beyond approximately 128--192\,KiB, after which
+there is little additional gain from larger transfers.  This plateau
+reflects the saturation of the underlying \texttt{tmpfs} memory bandwidth
+rather than a driver-level bottleneck.  The plateau for IncludeOS
+Polling, however, sits roughly twice as high as that for Linux POSIX,
+confirming that the unikernel's reduced software overhead shifts the
+bottleneck earlier along the chunk-size axis.
+
+\paragraph{Result variance.}
+Both IncludeOS configurations exhibit markedly lower coefficient of
+variation (CV) than Linux POSIX.  For sequential reads, IncludeOS
+Polling has CV = 1.40\% and IncludeOS IRQ has CV = 1.70\%, compared with
+CV = 5.31\% for Linux POSIX.  The reduced variance reflects the
+deterministic execution model of the unikernel: there is no scheduler
+preemption, no page-fault handling, and no background kernel activity
+competing for CPU cycles.
+
+\subsubsection{Analysis}
+
+The throughput advantage of IncludeOS over Linux can be attributed to
+three structural differences:
+
+\begin{enumerate}
+  \item \textbf{No syscall overhead.}  In IncludeOS, a call to
+    \texttt{read()} or \texttt{write()} dispatches directly to the
+    VirtioFS driver without a privilege-level switch.  In Linux, every
+    POSIX call traverses the \texttt{syscall} entry stub, VFS
+    \texttt{vfs\_read}/\texttt{vfs\_write}, and then the FUSE file-system
+    layer, which forwards the request to \texttt{virtiofsd} in user space
+    via a shared ring buffer—itself requiring a further context switch.
+    The round-trip involves at minimum two mode switches and a user-space
+    daemon wakeup per I/O operation.
+
+  \item \textbf{No FUSE protocol overhead.}  Linux VirtioFS is
+    implemented on top of the kernel FUSE framework.  Every data transfer
+    is wrapped in a FUSE request header, routed through the FUSE device,
+    and unpacked by \texttt{virtiofsd}.  IncludeOS communicates directly
+    with the VirtioFS virtqueue without any FUSE framing.
+
+  \item \textbf{Absence of OS interference.}  As a unikernel, IncludeOS
+    runs a single cooperative task.  There are no timer interrupts, no
+    background kernel threads, no memory-pressure events, and no
+    scheduler preemption during the benchmark, all of which contribute to
+    the lower variance and higher average throughput observed.
+\end{enumerate}
+
+\textbf{Answer to RQ1:} Yes.  The IncludeOS VirtioFS implementation
+achieves substantially higher I/O throughput than Linux across all
+measured access patterns, chunk sizes, and notification modes.  In
+polling mode the peak speedup reaches $\times$1.74--1.84 at large chunk
+sizes and $\times$2.34--3.02 at 8\,KiB—demonstrating that the
+elimination of kernel, VFS, and FUSE overheads is highly beneficial for
+VirtioFS-backed I/O.
+
+% -------------------------------------------------------------------
+\subsection{RQ2 – Tweaking Linux: io\_uring SQPOLL}
+\label{sec:rq2}
+
+\textbf{RQ2:} \emph{Why is the I/O throughput in VirtioFS Linux slower
+than IncludeOS?  Can we tweak Linux to achieve equivalent performance?}
+
+\subsubsection{Results}
+
+Figure~\ref{fig:rq2_combined} compares Linux POSIX and Linux io\_uring
+SQPOLL across the four access patterns.  Figure~\ref{fig:rq2_speedup}
+shows the per-chunk-size speedup ratio of io\_uring relative to POSIX.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{plots/rq2_combined.pdf}
+  \caption{RQ2 – Mean VirtioFS throughput: Linux POSIX vs.\ Linux
+    io\_uring SQPOLL.  Shaded bands are 95\% confidence intervals.}
+  \label{fig:rq2_combined}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{plots/rq2_speedup.pdf}
+  \caption{RQ2 – io\_uring SQPOLL throughput as a ratio of Linux POSIX
+    throughput (values above 1.0 indicate an improvement, below 1.0 a
+    regression).  The dashed grey line marks parity.}
+  \label{fig:rq2_speedup}
+\end{figure}
+
+Contrary to what one might expect from a zero-copy, polling-based I/O
+interface, io\_uring SQPOLL is \emph{slower} than Linux POSIX across the
+entire chunk-size range and all four access patterns.  Peak sequential
+read throughput with io\_uring reaches only \textbf{2{,}280\,MiB/s}
+versus \textbf{2{,}743\,MiB/s} for POSIX (a regression of
+$\times$0.83).  For sequential writes the regression is $\times$0.88.
+At the smallest chunk size of 8\,KiB, the penalty is even larger:
+io\_uring achieves only \textbf{166\,MiB/s} for sequential reads,
+against \textbf{266\,MiB/s} for POSIX ($\times$0.62), indicating that
+the overhead is particularly acute at high request rates.
+
+Figure~\ref{fig:all_systems} places all four configurations side by side
+to contextualise these findings relative to the IncludeOS baselines.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{plots/all_systems_combined.pdf}
+  \caption{All system configurations – VirtioFS throughput overview for
+    all four access patterns.  io\_uring falls below even the Linux POSIX
+    baseline.}
+  \label{fig:all_systems}
+\end{figure}
+
+\subsubsection{Analysis}
+
+The degradation of io\_uring SQPOLL relative to POSIX on a VirtioFS
+filesystem has several interacting causes:
+
+\paragraph{VirtioFS is not a native io\_uring target.}  The Linux
+VirtioFS driver sits inside the kernel's FUSE layer, which ultimately
+forwards requests to \texttt{virtiofsd} in user space.  io\_uring
+submits I/O operations to the kernel, but for FUSE filesystems the kernel
+must still block waiting for the daemon to process the request.
+Consequently, even though the application avoids the \texttt{read}/\texttt{write}
+syscall entry through SQPOLL, the kernel I/O path itself remains
+synchronous with respect to the daemon: io\_uring does not provide a
+path to bypass the FUSE round-trip.
+
+\paragraph{SQPOLL thread contention.}  The \texttt{IORING\_SETUP\_SQPOLL}
+flag spawns a dedicated kernel thread that continuously polls the
+submission queue.  This thread consumes a hardware thread at all times,
+including when there is no outstanding I/O.  With \texttt{sq\_thread\_idle}
+set to 10\,000\,ms the SQPOLL thread never sleeps during the benchmark.
+On the Linux guest, which has four vCPUs, this persistent spinning
+competes with the \texttt{virtiofsd} processing thread and the
+application thread itself—increasing cache pressure and reducing the
+effective CPU available to forward I/O.
+
+\paragraph{Queue depth of 1.}  The benchmark deliberately maintains a
+single outstanding I/O at a time to match the serialised POSIX access
+pattern.  SQPOLL provides its greatest benefit at high queue depths where
+many I/O operations can be batched into the submission ring with a single
+kernel notification.  At depth 1 the overhead of the ring management
+(submission queue entry formatting, memory barriers, and completion-queue
+polling) is incurred for every single operation without amortisation.
+
+\paragraph{Structural gap remains.}  Even if SQPOLL overhead were
+eliminated, the FUSE protocol and \texttt{virtiofsd} round-trip would
+remain.  The root causes of Linux's throughput gap relative to IncludeOS
+are architectural: the kernel VFS layer, the FUSE framing, the
+\texttt{virtiofsd} user-space daemon, and the privilege transitions that
+separate them are all absent in a unikernel.  These cannot be removed
+through a user-space API change alone; they would require kernel
+modifications (e.g., a native kernel-space VirtioFS driver operating
+outside FUSE) or a unikernel-like architecture.
+
+\textbf{Answer to RQ2:}  The throughput gap between Linux and IncludeOS
+is caused by the multiple software layers interposed between the
+application and the VirtioFS virtqueue in a general-purpose OS: system
+calls, the VFS, FUSE framing, and the \texttt{virtiofsd} user-space
+daemon.  Replacing synchronous POSIX calls with io\_uring SQPOLL does
+not close this gap; on the contrary, at queue depth~1 with a FUSE-backed
+filesystem, SQPOLL introduces a throughput regression of 9--38\%
+compared with ordinary POSIX I/O.  Achieving parity with IncludeOS on
+Linux would require removing the FUSE indirection, which is a kernel-level
+architectural change beyond the scope of a user-space API tweak.
+
+% -------------------------------------------------------------------
+\subsection{RQ3 – Impact on Video Decoding}
+\label{sec:rq3}
+
+\textbf{RQ3:} \emph{What impact will enhanced I/O throughput have on
+common tasks such as video decoding?}
+
+\subsubsection{Results}
+
+Figure~\ref{fig:rq3_box} shows a box plot of decode times (runs 1--29)
+for the three system configurations.  Figure~\ref{fig:rq3_bar} presents
+means with 95\% confidence intervals and speedup annotations relative to
+Linux.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{plots/rq3_c63dec_boxplot.pdf}
+  \caption{RQ3 – Distribution of c63 decode times over 29 warm runs.
+    Boxes span the interquartile range; whiskers extend to the most
+    extreme non-outlier observation.}
+  \label{fig:rq3_box}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.7\linewidth]{plots/rq3_c63dec_bar.pdf}
+  \caption{RQ3 – Mean c63 decode time ± 95\% CI.  Speedup labels above
+    the IncludeOS bars are relative to the Linux mean.}
+  \label{fig:rq3_bar}
+\end{figure}
+
+Table~\ref{tab:c63dec_stats} summarises the per-configuration statistics.
+
+\begin{table}[htbp]
+  \centering
+  \caption{c63dec benchmark statistics (runs 1--29; run 0 excluded as
+    cold start).  Speedup is relative to Linux POSIX.}
+  \label{tab:c63dec_stats}
+  \begin{tabular}{lrrrrc}
+    \hline
+    \textbf{Configuration} & \textbf{Mean (s)} & \textbf{Std (s)} &
+      \textbf{Min (s)} & \textbf{Max (s)} & \textbf{Speedup} \\
+    \hline
+    Linux POSIX          & 4.861 & 0.032 & 4.820 & 4.957 & $\times$1.00 \\
+    IncludeOS Polling    & 3.759 & 0.015 & 3.731 & 3.790 & $\times$\textbf{1.29} \\
+    IncludeOS IRQ (MSI-X)& 4.096 & 0.030 & 4.020 & 4.144 & $\times$1.19 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+\paragraph{IncludeOS Polling.}
+IncludeOS Polling achieves a mean decode time of \textbf{3.759\,s},
+compared with \textbf{4.861\,s} for Linux POSIX—a speedup of
+$\times$\textbf{1.29}, or a \textbf{22.7\% reduction} in wall-clock
+decode time.  This result is consistent with the throughput advantage
+observed in the POSIX microbenchmarks: the c63dec workload performs
+many small reads (parsing the compressed bitstream) and writes (emitting
+decoded YUV frames), both of which benefit disproportionately from the
+elimination of per-request POSIX and FUSE overhead.
+
+IncludeOS Polling also exhibits the lowest variance of any configuration:
+a standard deviation of just \textbf{0.015\,s} (CV~=~0.4\%) versus
+\textbf{0.032\,s} (CV~=~0.7\%) for Linux.  The tighter distribution
+makes performance more predictable—a property valuable in real-time or
+latency-sensitive media pipelines.
+
+\paragraph{IncludeOS IRQ.}
+IncludeOS IRQ reduces decode time to \textbf{4.096\,s}, a
+$\times$\textbf{1.19} speedup (18.6\% reduction) over Linux.  The 8.5\%
+gap between IRQ and Polling within IncludeOS reflects the interrupt-delivery
+overhead noted in Section~\ref{sec:rq1}: for a codec that issues many
+small I/O requests per decoded frame, the accumulated cost of MSI-X wakeup
+cycles is significant.
+
+\paragraph{Cold-start behaviour.}
+Run~0 reveals a striking asymmetry between Linux and IncludeOS.  Linux
+requires \textbf{6.092\,s} on the cold run—a \textbf{25.3\%} penalty
+over its warm mean—caused by page-fault handling, dynamic loader
+initialisation, and I/O scheduling setup.  IncludeOS Polling's cold run
+takes \textbf{3.772\,s}, only \textbf{0.4\%} above its warm mean;
+IncludeOS IRQ shows a similarly negligible \textbf{0.2\%} cold overhead.
+This behaviour reflects the unikernel's single-process, pre-linked
+execution model: there is no dynamic linker, no kernel process
+initialisation, and no page-table population at startup.
+
+\paragraph{Decode speed in context.}
+The 29\% wall-clock improvement represents a meaningful gain in a
+realistic media-processing scenario.  A pipeline decoding video at a
+fixed frame rate would be able to sustain a higher rate or leave more
+CPU headroom for subsequent processing stages (encoding, filtering,
+network transmission) when running on IncludeOS.  Conversely, the
+determinism improvement—a threefold reduction in standard deviation—
+reduces worst-case latency, which matters for applications with
+real-time playback constraints.
+
+\subsubsection{Analysis}
+
+The magnitude of the end-to-end speedup (22.7\%) is smaller than the
+raw peak-throughput speedup seen in the microbenchmarks ($\times$1.74 for
+sequential reads).  This is expected: the c63dec workload is not
+I/O-bound.  A substantial fraction of execution time is spent in the CPU
+decode pipeline (VLC decoding, IDCT, motion compensation), which is
+identical across all configurations.  The measured speedup therefore
+represents the I/O contribution to the total workload, scaled by the
+Amdahl factor of the non-I/O fraction.
+
+\textbf{Answer to RQ3:}  The higher I/O throughput of the IncludeOS
+VirtioFS implementation translates directly into faster end-to-end
+execution of a realistic video decoding task.  IncludeOS Polling
+completes decoding \textbf{22.7\% faster} than Linux POSIX, with a
+\textbf{threefold reduction in timing variance}.  IncludeOS IRQ delivers
+a more modest but still meaningful 18.6\% improvement.  The unikernel
+also eliminates the significant cold-start penalty observed on Linux,
+making every execution faster and more predictable.
+
+% -------------------------------------------------------------------
+\subsection{Threats to Validity}
+\label{sec:threats}
+
+\paragraph{Internal validity.}
+The \texttt{tmpfs} shared directory eliminates disk I/O from the
+measurements but also places an upper bound on achievable throughput set
+by the host's DRAM bandwidth.  Both Linux and IncludeOS are subject to
+the same bound; the relative comparison remains valid, but absolute
+numbers cannot be directly extrapolated to persistent storage scenarios.
+The benchmark disables all caching in \texttt{virtiofsd} and uses
+\texttt{O\_DIRECT} to prevent page-cache effects from masking driver
+latency; however, it cannot control KVM's internal shadow-page-table
+behaviour or QEMU's virtqueue polling interval.
+
+\paragraph{External validity.}
+The benchmark uses a single test file size (204.8\,MiB) and a fixed
+random seed.  Workloads with smaller files, varying access patterns, or
+concurrency (multiple I/O threads) may exhibit different relative
+performance.  The c63dec workload is a low-resolution educational codec;
+production video workloads with larger frames, higher frame rates, or
+compressed formats (H.264, AV1) may be more or less I/O-bound.
+
+\paragraph{Reproducibility.}
+All experiments use Nix-pinned dependency graphs; the build and runtime
+environments are fully reproducible.  The orchestration script
+\texttt{run\_bench.sh} is deterministic and requires no manual
+intervention between runs.  Nevertheless, results may differ on hardware
+with different DRAM bandwidth, CPU microarchitecture, or hypervisor
+implementation.
+
+% ============================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+This thesis has presented the design, implementation, and evaluation of a
+VirtioFS driver for the IncludeOS unikernel.  The evaluation addressed
+three research questions through a suite of controlled microbenchmarks
+and an end-to-end video decoding workload.
+
+Regarding \textbf{RQ1}, the results confirm that IncludeOS can achieve
+significantly higher VirtioFS I/O throughput than a standard Linux guest.
+In polling mode, peak throughput exceeds Linux POSIX by $\times$1.74--1.84
+across sequential and random patterns, and by up to $\times$3.02 at
+small chunk sizes where per-request overhead dominates.  Even the
+interrupt-driven MSI-X mode outperforms Linux by $\times$1.26--1.53.
+The advantage stems from the structural simplicity of the unikernel: the
+absence of a kernel boundary, VFS dispatch, FUSE framing, and a
+user-space daemon reduces every I/O to a near-direct transfer to the
+VirtioFS virtqueue.
+
+Regarding \textbf{RQ2}, the investigation into Linux-side optimisations
+via io\_uring SQPOLL produced a counterintuitive result: SQPOLL
+\emph{degrades} VirtioFS throughput by 9--38\% relative to ordinary POSIX
+I/O.  The regression arises because the FUSE-backed VirtioFS kernel driver
+cannot benefit from io\_uring's submission-batching model—each I/O still
+incurs a synchronous round-trip to \texttt{virtiofsd}—while the SQPOLL
+kernel thread introduces additional CPU contention.  Closing the
+performance gap with IncludeOS on Linux would require a kernel-level
+redesign of the VirtioFS stack, such as moving the driver out of the FUSE
+layer and into a dedicated in-kernel implementation.
+
+Regarding \textbf{RQ3}, the end-to-end c63 video decoder benchmark shows
+that the I/O throughput advantage of IncludeOS translates into meaningful
+application-level gains.  IncludeOS Polling completes decoding 22.7\%
+faster than Linux with three times lower timing variance.  Notably,
+IncludeOS completely eliminates the 25.3\% cold-start penalty observed on
+Linux, making unikernel execution faster from the very first run—a
+property particularly valuable in short-lived, function-as-a-service
+deployments where cold-start latency directly affects user experience.
+
+Taken together, these findings validate the motivation for implementing
+VirtioFS in a unikernel: the removal of general-purpose OS abstractions
+that are unnecessary in a single-application environment yields
+substantial, measurable I/O performance improvements that propagate to
+realistic application workloads.  Future work could explore higher
+io\_uring queue depths to amortise SQPOLL overhead, multi-threaded
+virtqueue access within IncludeOS, and persistent storage backends beyond
+\texttt{tmpfs} to evaluate the driver under disk-latency constraints.

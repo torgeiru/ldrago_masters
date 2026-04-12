@@ -1,0 +1,89 @@
+\contentsline {chapter}{Abstract}{i}{chapter*.1}%
+\contentsline {chapter}{Contents}{iv}{chapter*.1}%
+\contentsline {chapter}{\numberline {1}Motivation}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Research Questions}{2}{section.1.1}%
+\contentsline {subsection}{\numberline {1.1.1}Primary Hypothesis}{2}{subsection.1.1.1}%
+\contentsline {subsection}{\numberline {1.1.2}Extended Hypothesis}{2}{subsection.1.1.2}%
+\contentsline {section}{\numberline {1.2}Method}{3}{section.1.2}%
+\contentsline {chapter}{\numberline {2}Background}{4}{chapter.2}%
+\contentsline {section}{\numberline {2.1}System Emulation and Virtualization}{4}{section.2.1}%
+\contentsline {subsection}{\numberline {2.1.1}Overview}{4}{subsection.2.1.1}%
+\contentsline {subsection}{\numberline {2.1.2}QEMU and KVM}{4}{subsection.2.1.2}%
+\contentsline {subsection}{\numberline {2.1.3}Vhost-User Architecture}{5}{subsection.2.1.3}%
+\contentsline {section}{\numberline {2.2}Dual Ring Buffer}{5}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Memory Ordering}{5}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}The x86 Memory Model}{5}{subsection.2.3.1}%
+\contentsline {subsection}{\numberline {2.3.2}The C++ Memory Model}{6}{subsection.2.3.2}%
+\contentsline {section}{\numberline {2.4}io\_uring}{6}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Virtio Standard}{7}{section.2.5}%
+\contentsline {subsection}{\numberline {2.5.1}Introduction}{7}{subsection.2.5.1}%
+\contentsline {subsection}{\numberline {2.5.2}Device Discovery via PCI}{7}{subsection.2.5.2}%
+\contentsline {subsubsection}{Descriptor Area}{8}{subsection.2.5.2}%
+\contentsline {subsubsection}{Request Submission --- Driver to Device}{8}{subsection.2.5.2}%
+\contentsline {subsubsection}{Request Completion --- Device to Driver}{9}{figure.caption.3}%
+\contentsline {subsubsection}{Notification Mechanisms}{9}{figure.caption.5}%
+\contentsline {section}{\numberline {2.6}FUSE}{10}{section.2.6}%
+\contentsline {subsection}{\numberline {2.6.1}Protocol}{10}{subsection.2.6.1}%
+\contentsline {subsection}{\numberline {2.6.2}Initialization Handshake}{10}{subsection.2.6.2}%
+\contentsline {subsection}{\numberline {2.6.3}File Operations}{10}{subsection.2.6.3}%
+\contentsline {section}{\numberline {2.7}VirtioFS}{10}{section.2.7}%
+\contentsline {section}{\numberline {2.8}IncludeOS}{10}{section.2.8}%
+\contentsline {subsection}{\numberline {2.8.1}Overview}{13}{subsection.2.8.1}%
+\contentsline {subsection}{\numberline {2.8.2}PCI PMIO Interface}{13}{subsection.2.8.2}%
+\contentsline {subsection}{\numberline {2.8.3}Event-Driven Interrupt Handling}{13}{subsection.2.8.3}%
+\contentsline {subsection}{\numberline {2.8.4}Filesystem Support and MUSL Integration}{13}{subsection.2.8.4}%
+\contentsline {chapter}{\numberline {3}Design}{15}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Virtual Filesystem Layer}{15}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Virtio PCI Layer}{16}{section.3.2}%
+\contentsline {section}{\numberline {3.3}VirtioFS Device}{16}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Initialization Sequence}{16}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2}Synchronous Polling Model}{16}{subsection.3.3.2}%
+\contentsline {chapter}{\numberline {4}Implementation}{19}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Virtual Filesystem Layer}{19}{section.4.1}%
+\contentsline {subsection}{\numberline {4.1.1}sys\_open}{19}{subsection.4.1.1}%
+\contentsline {subsection}{\numberline {4.1.2}sys\_read / sys\_readv / sys\_write / sys\_writev}{20}{subsection.4.1.2}%
+\contentsline {subsection}{\numberline {4.1.3}sys\_close}{20}{subsection.4.1.3}%
+\contentsline {subsection}{\numberline {4.1.4}sys\_unlink}{21}{subsection.4.1.4}%
+\contentsline {section}{\numberline {4.2}Virtio PCI Layer}{22}{section.4.2}%
+\contentsline {section}{\numberline {4.3}VirtioFS Device Driver}{24}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1}Initialisation}{24}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2}Inode Resolution}{24}{subsection.4.3.2}%
+\contentsline {subsection}{\numberline {4.3.3}Open, Create, and Close}{24}{subsection.4.3.3}%
+\contentsline {subsection}{\numberline {4.3.4}Read and Write}{24}{subsection.4.3.4}%
+\contentsline {subsection}{\numberline {4.3.5}Seek, Unlink, and Registration}{24}{subsection.4.3.5}%
+\contentsline {chapter}{\numberline {5}Evaluation}{26}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Experimental Setup}{26}{section.5.1}%
+\contentsline {subsection}{\numberline {5.1.1}Virtual-Machine Infrastructure}{26}{subsection.5.1.1}%
+\contentsline {subsection}{\numberline {5.1.2}Reproducible Builds with Nix}{27}{subsection.5.1.2}%
+\contentsline {subsection}{\numberline {5.1.3}POSIX I/O Benchmark (Experiments 1 \& 2)}{27}{subsection.5.1.3}%
+\contentsline {paragraph}{Test file.}{28}{subsection.5.1.3}%
+\contentsline {paragraph}{Chunk sweep.}{28}{subsection.5.1.3}%
+\contentsline {paragraph}{Timing.}{28}{subsection.5.1.3}%
+\contentsline {subsection}{\numberline {5.1.4}io\_uring Benchmark (Experiment 3)}{28}{subsection.5.1.4}%
+\contentsline {subsection}{\numberline {5.1.5}C63 Video Decoder Benchmark}{28}{subsection.5.1.5}%
+\contentsline {section}{\numberline {5.2}RQ1 -- VirtioFS Throughput: IncludeOS vs.\ Linux}{29}{section.5.2}%
+\contentsline {subsection}{\numberline {5.2.1}Results}{29}{subsection.5.2.1}%
+\contentsline {paragraph}{IncludeOS Polling vs.\ Linux POSIX.}{30}{figure.caption.17}%
+\contentsline {paragraph}{IncludeOS IRQ vs.\ Linux POSIX.}{30}{figure.caption.17}%
+\contentsline {paragraph}{Throughput scaling with chunk size.}{31}{figure.caption.17}%
+\contentsline {paragraph}{Result variance.}{31}{figure.caption.17}%
+\contentsline {subsection}{\numberline {5.2.2}Analysis}{31}{subsection.5.2.2}%
+\contentsline {section}{\numberline {5.3}RQ2 -- Tweaking Linux: io\_uring SQPOLL}{32}{section.5.3}%
+\contentsline {subsection}{\numberline {5.3.1}Results}{32}{subsection.5.3.1}%
+\contentsline {subsection}{\numberline {5.3.2}Analysis}{33}{subsection.5.3.2}%
+\contentsline {paragraph}{VirtioFS is not a native io\_uring target.}{33}{subsection.5.3.2}%
+\contentsline {paragraph}{SQPOLL thread contention.}{33}{subsection.5.3.2}%
+\contentsline {paragraph}{Queue depth of 1.}{35}{subsection.5.3.2}%
+\contentsline {paragraph}{Structural gap remains.}{35}{subsection.5.3.2}%
+\contentsline {section}{\numberline {5.4}RQ3 -- Impact on Video Decoding}{35}{section.5.4}%
+\contentsline {subsection}{\numberline {5.4.1}Results}{35}{subsection.5.4.1}%
+\contentsline {paragraph}{IncludeOS Polling.}{35}{table.caption.23}%
+\contentsline {paragraph}{IncludeOS IRQ.}{37}{table.caption.23}%
+\contentsline {paragraph}{Cold-start behaviour.}{37}{table.caption.23}%
+\contentsline {subsection}{\numberline {5.4.2}Analysis}{37}{subsection.5.4.2}%
+\contentsline {section}{\numberline {5.5}Threats to Validity}{38}{section.5.5}%
+\contentsline {paragraph}{Internal validity.}{38}{section.5.5}%
+\contentsline {paragraph}{External validity.}{38}{section.5.5}%
+\contentsline {paragraph}{Reproducibility.}{38}{section.5.5}%
+\contentsline {chapter}{\numberline {6}Conclusion and Future Work}{39}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Future Work}{40}{section.6.1}%

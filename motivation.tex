@@ -1,0 +1,29 @@
+\section{Motivation}
+The project started with a project listing issued by my supervisor regarding implementing a Virtio file system (VirtioFS) driver in IncludeOS, a unikernel operating system. Unikernels are libraries that can be linked with application code forming an application capable of running directly on bare metal. A unikernel executes entirely in kernel mode, thereby eliminating context switch overhead present in operating systems such as Linux. This realization motivated an investigation into whether a VirtioFS driver implemented in IncludeOS could achieve higher performance than its Linux counterpart, particularly with respect to IO throughput.
+
+File system support in IncludeOS comprises a virtual file system (VFS) layer, file descriptor abstractions, incomplete FAT16 and FAT32 drivers, and Virtio and memory disk block drivers. The VFS layer is tightly coupled with FAT, hindering clean integrations of alternative file systems such as VirtioFS. Therefore, a redesign of the VFS architecture is necessary to enable clean integration of alternative file systems. Developing block-level file system drivers is complex and prone to errors. A VirtioFS implementation addresses this by delegating file system operations to a file system server that performs system calls through the host kernel, thereby leveraging the host kernel’s existing file system driver implementations.
+
+Our findings showed that IncludeOS outperformed the Linux guest in file system throughput. However, during this work we discovered io\_uring, a modern Linux interface that reduces system call overhead by using shared ring buffers between user and kernel space. io\_uring can optionally support polling instead of interrupts, providing fine-grained control over I/O execution. These characteristics indicates that io\_uring could potentially close the performance gap with IncludeOS, motivating a further investigation into whether it could rival the throughput achieved by the unikernel approach.
+
+After a brief detour to evaluate io\_uring as an alternative interface, we return to assessing the driver through an application. To assess the impact of file system performance on applications, this project examines video decoding using the C63 toy codec. Video decoding is I/O intensive and bug-prone, making it well suited for isolated execution in IncludeOS virtual machines under QEMU and KVM, similar to microvirtualization approaches such as Bromium.
+
+% \section{Related work}
+% it makes much more sense to write it after your summary of the related work you discover while you write the essay
+
+\section{Research questions}
+\begin{itemize}
+    \item \textbf{RQ1:} Can a VirtioFS implementation in IncludeOS have a higher I/O throughput than Linux?
+    \item \textbf{RQ2:} Why is the I/O throughput in VirtioFS Linux slower than IncludeOS? Can we tweak Linux to achieve equivalent performance?
+    \item \textbf{RQ3:} What impact will enhanced I/O throughput have on common tasks such as video decoding?
+\end{itemize}
+
+\subsection{Primary hypothesis}
+We hypothesize that an IncludeOS implementation will rival Linux in POSIX performance measurements. The explaination for this hypothesis is twofold. IncludeOS does not preempt by design and contains less overall code. Therefore, IncludeOS has lower overhead with better CPU efficiency. Furthermore, IncludeOS operates without the assumption of kernel and user space isolation thus allowing for a multitude of zero copy techniqueues that would not be tolerated in a general purpose operating system e.g. Linux.
+
+\subsection{Extended hypothesis}
+Our findings confirm the main hypothesis. Through hands-on experimentation with the problem domain, we developed a deeper, more nuanced understanding of I/O performance bottlenecks.
+
+To address this, we examined io\_uring, a proposed Linux kernel interface designed to reduce syscall overhead by batching I/O operations. io\_uring enables developers to optimize I/O performance through several mechanisms: fine-tuning device driver behavior, optimizing data movement patterns, and eliminating unnecessary system calls.
+
+\section{Method}
+The thesis employs standard scientific hypothesis formulation about performance metrics and driver prototyping. The prototyping step includes reading available device specifications and common behaviour for device emulation, utilizing reverse engineering methods whenever documentation is lacking. System thinking and inference hypothesis for device behaviour will be confirmed with dynamic and static analysis.
