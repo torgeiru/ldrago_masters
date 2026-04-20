@@ -1,6 +1,3 @@
-% ============================================================
-%  VirtioFS Driver for IncludeOS — Master's Thesis
-% ============================================================
 \documentclass[12pt, a4paper, oneside]{report}
 
 % ── Packages ─────────────────────────────────────────────────────────────────
@@ -14,6 +11,7 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{listings}
+\usepackage{xcolor}
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{microtype}
@@ -28,95 +26,52 @@
 \usepackage{enumitem}
 \usepackage{url}
 
-% ── Colours ──────────────────────────────────────────────────────────────────
-\definecolor{thesisblue}{HTML}{1A1A1A}
-\definecolor{lightblue}{HTML}{888888}
-\definecolor{codegray}{HTML}{F5F5F5}
-\definecolor{darkgray}{HTML}{5F5E5A}
+\onehalfspacing
 
 % ── Hyperref setup ───────────────────────────────────────────────────────────
-\hypersetup{
-  colorlinks=true,
-  linkcolor=thesisblue,
-  citecolor=thesisblue,
-  urlcolor=thesisblue,
-  pdftitle={VirtioFS Driver for IncludeOS},
-  pdfauthor={Master's Thesis},
+% \hypersetup{
+%   colorlinks=true,
+%   linkcolor=thesisblue,
+%   citecolor=thesisblue,
+%   urlcolor=thesisblue,
+%   pdftitle={VirtioFS Driver for IncludeOS},
+%   pdfauthor={Master's Thesis},
+% }
+
+\lstdefinestyle{chstyle}{%
+basicstyle=\ttfamily\small,
+keywordstyle=\color{magenta!100},
+tabsize=4,
+commentstyle=\color{magenta!100},
+frame=tblr
 }
 
-% ── Typography ───────────────────────────────────────────────────────────────
-\setstretch{1.25}
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{8pt plus 2pt minus 2pt}
-
-% ── Chapter/section style ────────────────────────────────────────────────────
-\titleformat{\chapter}[display]
-  {\normalfont\bfseries\color{thesisblue}}
-  {\normalsize\color{lightblue}Chapter \thechapter}
-  {6pt}
-  {\huge}
-  [\vspace{4pt}\textcolor{lightblue}{\titlerule[1.8pt]}]
-
-\titleformat{\section}
-  {\normalfont\large\bfseries\color{thesisblue}}{\thesection}{1em}{}
-\titleformat{\subsection}
-  {\normalfont\normalsize\bfseries\color{thesisblue}}{\thesubsection}{1em}{}
-\titleformat{\subsubsection}
-  {\normalfont\normalsize\bfseries\itshape\color{darkgray}}{\thesubsubsection}{1em}{}
-
-% ── Header / Footer ──────────────────────────────────────────────────────────
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[L]{\small\textcolor{darkgray}{\leftmark}}
-\fancyhead[R]{\small\textcolor{darkgray}{VirtioFS for IncludeOS}}
-\fancyfoot[C]{\small\thepage}
-\renewcommand{\headrulewidth}{0.4pt}
-
 % ── Listings style ───────────────────────────────────────────────────────────
-\lstset{
-  basicstyle=\small\ttfamily,
-  backgroundcolor=\color{codegray},
-  frame=single,
-  rulecolor=\color{lightblue!40},
-  breaklines=true,
-  breakatwhitespace=true,
-  tabsize=4,
-  showstringspaces=false,
+\lstdefinestyle{chstyle}{
+basicstyle=\ttfamily\small,
+keywordstyle=\color{magenta!100},
+tabsize=4,
+commentstyle=\color{magenta!100},
+frame=tblr
 }
 
 % ── Caption style ────────────────────────────────────────────────────────────
-\captionsetup{font=small, labelfont={bf,color=thesisblue}, textfont=it}
+% \captionsetup{font=small, labelfont={bf,color=thesisblue}, textfont=it}
 
 % ── Graphics path ────────────────────────────────────────────────────────────
 \graphicspath{{./diagrams/}{./plots/}}
 
+\title{VirtioFS in IncludeOS \\ 
+{\Large University of Oslo}}
+\author{Torgeir Skovholt}
+\date{\today}
+
 % ════════════════════════════════════════════════════════════════════════════
 \begin{document}
-
-% ── Title Page ───────────────────────────────────────────────────────────────
-\begin{titlepage}
-\centering
-\vspace*{2cm}
-{\huge\bfseries\color{thesisblue} VirtioFS Driver for IncludeOS\par}
-\vspace{0.5cm}
-{\large\color{darkgray} Design, Implementation, and Performance Evaluation\par}
-\vspace{2cm}
-\textcolor{lightblue}{\rule{\linewidth}{1.8pt}}
-\vspace{1cm}
-{\large Master's Thesis\par}
-\vspace{0.5cm}
-{\normalsize Department of Informatics\par}
-\vspace{4cm}
-{\large 2026\par}
-\vfill
-\end{titlepage}
-
-% ── Front Matter ─────────────────────────────────────────────────────────────
-\pagenumbering{roman}
+\maketitle
 
 % ── Abstract ─────────────────────────────────────────────────────────────────
 \chapter*{Abstract}
-\addcontentsline{toc}{chapter}{Abstract}
 
 This thesis presents the design, implementation, and performance evaluation of a
 VirtioFS file-system driver for IncludeOS, a unikernel operating system.
@@ -134,29 +89,14 @@ polling mode, peak sequential read throughput reaches 4{,}786~MiB/s ---
 a \(\times\)1.74 speedup over Linux POSIX --- with up to \(\times\)3.02 at
 small 8~KiB chunk sizes where per-request overhead dominates.  An investigation
 of io\_uring SQPOLL as a Linux-side optimisation reveals a counterintuitive
-regression of 9--38\% relative to plain POSIX I/O, attributable to the
-FUSE-backed VirtioFS stack being unable to benefit from io\_uring's
-submission-batching model.
+regression of 9--38\% relative to plain POSIX I/O.
 
-An end-to-end video decoding benchmark using the C63 educational codec shows that
-the I/O throughput advantage translates into a 22.7\% reduction in wall-clock
-decode time with threefold lower timing variance, and eliminates the 25.3\%
-cold-start penalty observed on Linux.  These results validate the
-hypothesis that removing general-purpose OS abstractions --- system calls, the
-VFS, FUSE framing, and a user-space daemon --- yields measurable I/O performance
-improvements that propagate to realistic application workloads.
-
-\vspace{1em}
-\textbf{Keywords:} VirtioFS, IncludeOS, unikernel, FUSE, Virtio, io\_uring,
-file-system performance, QEMU, KVM.
+An end-to-end video decoding benchmark using the C63 educational codec shows that the I/O throughput advantage translates into a 22.7\% reduction in wall-clock decode time, and eliminates the 25.3\% cold-start penalty observed on Linux.  These results validate the hypothesis that removing general-purpose OS abstractions --- system calls, the VFS, FUSE framing, and a user-space daemon --- yields measurable I/O performance improvements that propagate to realistic application workloads.
 
 % ── Table of Contents ────────────────────────────────────────────────────────
 \tableofcontents
-\addcontentsline{toc}{chapter}{Contents}
-
 
 % ── Main Matter ──────────────────────────────────────────────────────────────
-\cleardoublepage
 \pagenumbering{arabic}
 
 % ════════════════════════════════════════════════════════════════════════════
@@ -229,9 +169,9 @@ Our findings confirm the main hypothesis.  Through hands-on experimentation with
 the problem domain, we developed a deeper, more nuanced understanding of I/O
 performance bottlenecks.  To address this, we examined io\_uring, a proposed
 Linux kernel interface designed to reduce syscall overhead by batching I/O
-operations.  io\_uring enables developers to optimize I/O performance through
-several mechanisms: fine-tuning device driver behaviour, optimizing data movement
-patterns, and eliminating unnecessary system calls.
+operations or a kernel.  io\_uring enables developers to optimize I/O performance through several mechanisms: fine-tuning device driver behaviour, optimizing data movement patterns, and eliminating unnecessary system calls.
+
+% I need to discuss these hypotheses
 
 \section{Method}
 
@@ -241,6 +181,9 @@ device specifications and common behaviour for device emulation, utilizing rever
 engineering methods whenever documentation is lacking.  System thinking and
 inference hypothesis for device behaviour will be confirmed with dynamic and
 static analysis.
+
+% What did Carsten say here? What resources
+% I will need to write this better:)
 
 % ════════════════════════════════════════════════════════════════════════════
 %  CHAPTER 2 — BACKGROUND
@@ -300,6 +243,34 @@ file-system device in a separate user-space daemon, handling the full request
 lifecycle --- notification, parsing, processing, and response --- without
 involving QEMU.
 
+\section{VirtioFS}
+\label{sec:virtiofs}
+
+VirtioFS~\cite{goyal2020} enables a Linux host and its guest VM to share a
+designated host directory.  The guest runs the VirtioFS kernel driver; on the
+host \textbf{VirtioFSD} acts as a remote file-system server.  Communication
+uses the FUSE protocol transported over Virtio virtqueues.  The shared memory
+is accessible to both sides without the need for copying.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.90\linewidth]{virtiofs_static.png}
+  \caption{VirtioFS static component overview}
+  \label{fig:virtiofs_static}
+\end{figure}
+
+Queue 0 is the \textit{high-priority} queue for latency-sensitive messages such
+as \texttt{FUSE\_FORGET}; queue 1 is the general-purpose \textit{request} queue.
+VirtioFS supports scatter-gather I/O: a single descriptor chain may reference
+multiple discontiguous guest buffers.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.80\linewidth]{virtiofs_sequence.png}
+  \caption{An abstract sequence diagram modeling a guest read through the VirtioFS stack.
+    Blue = guest-side actors; teal = host-side.}
+  \label{fig:virtiofs_sequence}
+\end{figure}
+
 \section{Dual Ring Buffer}
 \label{sec:dualring}
 
@@ -311,8 +282,14 @@ producer and one consumer operate concurrently, no locks are required.
 The \textbf{dual ring buffer} pattern consists of two circular ring buffers.
 The first ring buffer carries requests from client to server; the second carries
 responses from server to client.  Together they form a lockless
-request--response channel.  This pattern is the foundational atom of both
-io\_uring and Virtio, and understanding it is essential for understanding either.
+request--response channel. This abstract pattern is the foundation for both
+io\_uring and Virtio. 
+
+\section{Atomics}
+Compiler atomics and CPU atomics
+% Torn reads and writes
+% https://mintomic.github.io/
+% x86 loads and stores are atomic
 
 \section{Memory Ordering}
 \label{sec:memory}
@@ -334,21 +311,6 @@ hardware memory models.  It defines a set of memory orderings that the programme
 can attach to atomic operations to control visibility and synchronization
 guarantees across threads:
 
-\begin{itemize}
-  \item \texttt{memory\_order\_relaxed}: no synchronization or ordering
-        guarantee beyond atomicity of the operation itself.
-  \item \texttt{memory\_order\_acquire}: no reads or writes in the current
-        thread can be reordered before this load.  Pairs with a release on
-        another thread to establish a happens-before relationship.
-  \item \texttt{memory\_order\_release}: no reads or writes in the current
-        thread can be reordered after this store.  All prior writes become
-        visible to any thread that performs an acquire on the same atomic
-        variable.
-  \item \texttt{memory\_order\_seq\_cst}: the strongest ordering.  Establishes
-        a single total order of all sequentially consistent operations across all
-        threads.
-\end{itemize}
-
 In the context of the Virtio split queue, the C++ memory model is applied
 precisely: a \texttt{memory\_order\_release} fence is issued after populating
 the descriptor chain and before incrementing the available ring index, ensuring
@@ -356,6 +318,13 @@ all descriptor writes are visible to the device before it observes the updated
 index.  A subsequent \texttt{memory\_order\_seq\_cst} fence precedes the check
 of the used ring's notification suppression flag, preventing reordering that
 could cause a missed notification.
+
+% https://en.cppreference.com/cpp/atomic/atomic_thread_fence
+% Reading the notification flag
+
+% 1. Corrupted virtqueues
+% 2. Missing notifications
+% Improve usefullness of the ^^^
 
 \section{io\_uring}
 \label{sec:iouring}
@@ -379,8 +348,6 @@ kernel thread continuously polls the submission queue for new entries.  In this
 mode, applications can perform I/O with zero system calls for the duration of the
 polling window.  When the kernel thread has been idle for a configurable timeout,
 it sleeps and requires a wakeup syscall (\texttt{io\_uring\_enter}) to resume.
-\textbf{IOPOLL} is an additional polling mode for completion events, available
-only for devices that support it such as NVMe drives with polling queues.
 
 \textbf{liburing} is a user-space wrapper library around the io\_uring API.
 io\_uring's raw interface involves careful management of ring indices, memory
@@ -402,22 +369,21 @@ Virtio~\cite{virtio2024} is a paravirtualization standard for efficient data
 exchange between a guest \textit{driver} and a host \textit{device}.  It
 separates a \textbf{control plane} --- device discovery, configuration, and
 feature negotiation --- from a \textbf{data plane} that exchanges bulk data via
-shared-memory ring structures called \textit{virtqueues}.
+shared-memory ring structures called \textbf{virtqueues}
 
 \subsection{Device Discovery via PCI}
 
 Virtio devices advertise their register regions through vendor-specific PCI
 capabilities, each with a \texttt{cfg\_type} identifying the region and
 \texttt{bar}, \texttt{offset}, and \texttt{length} fields locating it.  Four
-standard capability types are defined:
+standard Virtio capability types are defined:
 
 \begin{itemize}
   \item \texttt{VIRTIO\_PCI\_CAP\_COMMON\_CFG}: device-wide and per-queue
         configuration registers.
   \item \texttt{VIRTIO\_PCI\_CAP\_NOTIFY\_CFG}: queue notification region.
   \item \texttt{VIRTIO\_PCI\_CAP\_ISR\_CFG}: interrupt status register.
-  \item \texttt{VIRTIO\_PCI\_CAP\_DEVICE\_CFG}: device-class-specific
-        registers.
+  \item \texttt{VIRTIO\_PCI\_CAP\_DEVICE\_CFG}: device-class-specific registers.
 \end{itemize}
 
 The control plane governs the full device lifecycle.  The specification
@@ -430,13 +396,13 @@ thread.
 
 \subsubsection{Descriptor Area}
 
-The descriptor area is an array of \texttt{virtq\_desc} entries each carrying a
-guest-physical \textbf{Buffer} address, a byte \textbf{Len}, \textbf{Flags}
-(NEXT for chaining, WRITE for device-writable buffers), and a chain \textbf{Next}
-index.  Readable descriptors must precede all writable descriptors --- no
-interleaving is permitted.  This maps directly onto the FUSE request--response
-pattern: the FUSE request occupies the readable section and the response buffer
-the writable section.
+The descriptor area is an array of descriptor entries each carrying a
+guest-physical \textbf{Buffer} address, a byte \textbf{Len}, \textbf{Flags}, and a chain
+\textbf{Next} index. The \textbf{Next} is valid when the \texttt{NEXT} flag is set in the same entry. A writeable descriptor is distinguished from a readable descriptor by having \texttt{WRITE} flag. Readable descriptors must precede all writable descriptors --- no interleaving is permitted.
+
+\subsubsection{Available and Used Areas}
+
+The driver and device communicate using two areas with similar structure: Available and used area. The areas \textbf{MUST} only be modified by one end and read by the other. The driver modifies the available area while the device modifies the used area. The driver reads the used area while the device reads the available area. The areas follow the dual ring buffer pattern described in section~\ref{sec:dualring} with additional flag fields for signaling that notifications are not needed for processing the request.
 
 \subsubsection{Request Submission --- Driver to Device}
 
@@ -445,7 +411,7 @@ The driver allocates free descriptors, populates them, links them via the
 \texttt{ring[]}, and increments the available ring's \texttt{idx} to expose the
 request.  A \texttt{memory\_order\_release} fence precedes the counter advance.
 The driver then conditionally writes the queue index to the notification register
-to kick the device.
+to kick the device. The tracks request by comparing \texttt{\_avail\_ring->idx} against its locally maintained \texttt{\_last\_avail\_idx}. 
 
 \begin{figure}[htbp]
   \centering
@@ -457,8 +423,7 @@ to kick the device.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.85\linewidth]{avail_expose.png}
-  \caption{Driver increments \texttt{idx} to 1 (green), exposing the request.
-           A release fence precedes the increment.}
+  \caption{Driver increments \texttt{idx} to 1 (green), exposing the request.}
   \label{fig:avail_expose}
 \end{figure}
 
@@ -466,7 +431,7 @@ to kick the device.
 
 After processing a request, the device writes a \texttt{virtq\_used\_elem} ---
 containing the head descriptor index and bytes written into writable buffers ---
-and increments the used ring's \texttt{idx}.  The driver detects completion by
+and increments the used ring's \texttt{idx}. A store fence \textbf{MUST} precede the increment \ref{sec:memory}. The driver detects completion by
 comparing \texttt{\_used\_ring->idx} against its locally maintained
 \texttt{last\_used\_idx}.
 
@@ -492,6 +457,12 @@ Both sides can suppress notifications.  The driver sets
 \texttt{VIRTQ\_AVAIL\_F\_NO\_INTERRUPT} to inhibit device interrupts; the device
 sets \texttt{VIRTQ\_USED\_F\_NO\_NOTIFY} to inhibit driver kicks.  These flags
 enable runtime switching between interrupt-driven and polling modes.
+
+\subsection{Fences are complicated}
+% Missing notifications
+% Virtqueue corruption
+% Reference code on my github profile
+% Reference git commit patches
 
 \section{FUSE}
 \label{sec:fuse}
@@ -522,41 +493,6 @@ handle), and \texttt{FUSE\_FORGET} (decrement inode reference count).  Writes
 follow an analogous pattern; \texttt{FUSE\_CREATE} combines lookup and open for
 new files.
 
-\section{VirtioFS}
-\label{sec:virtiofs}
-
-VirtioFS~\cite{goyal2020} enables a Linux host and its guest VM to share a
-designated host directory.  The guest runs the VirtioFS kernel driver; on the
-host \textbf{VirtioFSD} acts as a remote file-system server.  Communication
-uses the FUSE protocol transported over Virtio virtqueues.  The shared memory
-regions are accessible to both sides without copying through QEMU or the kernel,
-giving VirtioFS substantially lower latency than network-based protocols such as
-NFS or SMB.
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.90\linewidth]{virtiofs_static.png}
-  \caption{Static component overview.  User space (blue): Guest VM with VirtioFS
-    driver and shared memory, VirtioFSD process, and KVM --- all inside QEMU.
-    Kernel space (green): VFS drivers and KVM module.}
-  \label{fig:virtiofs_static}
-\end{figure}
-
-Queue 0 is the \textit{high-priority} queue for latency-sensitive messages such
-as \texttt{FUSE\_FORGET}; queue 1 is the general-purpose \textit{request} queue.
-VirtioFS supports scatter-gather I/O: a single descriptor chain may reference
-multiple discontiguous guest buffers.
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.80\linewidth]{virtiofs_sequence.png}
-  \caption{Behavioural sequence of a guest read through the VirtioFS stack.
-    Blue = guest-side actors; teal = host-side.  The driver forges and queues
-    the request, signals KVM, which notifies VirtioFSD.  VirtioFSD reads from
-    the host VFS, forges the response, and queues it back.}
-  \label{fig:virtiofs_sequence}
-\end{figure}
-
 \section{IncludeOS}
 \label{sec:includeos}
 
@@ -572,7 +508,7 @@ substantial reductions in both CPU and memory consumption compared to traditiona
 virtual machines.  The virtual address space is configured with identity mapping
 to physical memory for the first 512~GiB.
 
-\subsection{PCI PMIO Interface}
+\subsection{PCI Interface}
 
 Driver implementations receive a reference to a generic PCI device abstraction
 during construction.  This abstraction exposes methods for PCI configuration
@@ -585,7 +521,11 @@ these preparatory calls, \texttt{init\_msix()} configures MSI-X support, and
 \texttt{get\_msix\_vectors()} returns the number of available interrupt vectors.
 MSI-X vector identifiers are valid in the range zero to vector count exclusive.
 
-\subsection{Event-Driven Interrupt Handling}
+% Shit, improve by adding some kind of class diagram?
+% Backlink to this
+
+\subsection{Events and Interrupts}
+\label{sec:includeos_events_irqs}
 
 IncludeOS implements interrupt handling through an event-driven architecture
 based on callback queues.  When a hardware interrupt fires, the system executes
@@ -667,8 +607,7 @@ routed to \texttt{os::print}.
 
 The Virtio PCI layer is divided into two independent components reflecting the
 specification's separation of control-plane initialization and data-plane I/O.
-Keeping them separate allows the data plane to be developed and optimized
-independently of the slow, one-time PCI configuration path.
+Keeping them separate allows the future implementation queue implementations such as packed queues.
 
 \texttt{Virtio\_control} encapsulates the full initialization sequence ---
 device validation, capability discovery, reset, status-bit sequencing, and
@@ -676,6 +615,12 @@ feature negotiation --- completing before returning.  Any failure triggers
 \texttt{\_virtio\_panic}, setting \texttt{VIRTIO\_CONFIG\_S\_FAILED} and halting
 via \texttt{os::panic}.  \texttt{VIRTIO\_F\_VERSION\_1} is unconditionally
 required; optional features are accepted only if the device advertises them.
+
+Virtio\_control required and optional features are passed by the constructor down to the \_negotiate\_features (called by the constructor) method. Virtio\_control an optional method for enabling MSI-X interrupts for deferred queue callback routines. Add a flowchart here!
+
+Virtio\_control exposes that is required by every device to call for finishing the Virtio PCI plane initialization sequence. That function is called set\_driver\_ok\_bit. This function is called after the Virtio\_control constructor, virtqueue constructors. Afterwards, the virtqueues are functional and operating. 
+
+% Class diagram may be useful here!
 
 \texttt{Split\_queue} implements the split virtqueue, exposing direct control
 over descriptor chain composition for arbitrary scatter-gather I/O patterns.  At
@@ -692,6 +637,8 @@ The VirtioFS device driver composes one \texttt{Virtio\_control} and two
 \texttt{Split\_queue} instances into a POSIX filesystem interface.  Queue 0 is
 the high-priority queue; queue 1 the request queue.  Both are configured in
 polling mode (\texttt{VIRTIO\_MSI\_NO\_VECTOR}).
+
+% The different versions use 
 
 \subsection{Initialization Sequence}
 
@@ -712,17 +659,76 @@ version numbers are validated and \texttt{max\_write} is stored, reduced by
 \texttt{FUSE\_BUFFER\_HEADER\_SIZE}.  Third, an \texttt{fs::Filesystem} struct
 is registered with \texttt{fs::VFS} under \texttt{VirtioFS\{id\}}.
 
+% I need to talk about MAX_WRITE
+
 \subsection{Synchronous Polling Model}
 
 All filesystem operations are \textit{synchronous and blocking}: at most one
 request is in flight at any time, and the CPU spins on
 \texttt{has\_processed\_used} until completion.  Busy-waiting in this manner
-eliminates scheduling latency and maximizes I/O throughput for the
-single-threaded unikernel execution model, where yielding the CPU while waiting
-for I/O would require a scheduler that IncludeOS does not provide.  Request
-headers are stack-allocated; caller-supplied buffers are enqueued directly as
+eliminates scheduling latency and maximizes I/O throughput.  Request
+headers are allocated on the stack; caller-supplied buffers are enqueued directly as
 Virtio descriptor tokens, delivering data between caller memory and VirtioFSD
 without any intermediate copies.
+
+\subsection{Combined Interaction}
+
+Figure~\ref{fig:virtio_pci_sequence} shows the full lifetime of the three
+cooperating components across initialization and a single I/O operation.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.90\linewidth]{virtio_pci_sequence.png}
+  \caption{Sequence diagram of the combined interaction between
+    \texttt{VirtioFS}, \texttt{Virtio\_control}, and \texttt{Split\_queue}.
+    The initialization phase (top) establishes the Virtio PCI control plane and
+    activates both queues before signalling driver readiness.
+    The I/O path (bottom) shows a single request cycle: descriptor chain
+    assembly, device notification, synchronous busy-wait, and dequeue.}
+  \label{fig:virtio_pci_sequence}
+\end{figure}
+
+During initialization \texttt{VirtioFS} first constructs \texttt{Virtio\_control},
+which drives the full PCI negotiation sequence --- reset, feature negotiation,
+and \texttt{FEATURES\_OK} --- before returning.  Both \texttt{Split\_queue}
+instances are then constructed, each selecting its queue slot, allocating the
+three ring structures with mandated alignments, registering their physical
+addresses, and enabling the queue.  A final call to \texttt{set\_driver\_ok\_bit}
+signals device readiness and concludes the control-plane setup.
+
+On the I/O path, \texttt{VirtioFS} calls \texttt{enqueue} on the appropriate
+\texttt{Split\_queue} with a \texttt{VirtTokens} vector.  \texttt{Split\_queue}
+builds the descriptor chain, issues a release fence to guarantee descriptor
+visibility, increments the available ring index, and calls
+\texttt{\_notify\_device} to write the queue index to the pre-computed
+notification register address.  \texttt{VirtioFS} then busy-waits on
+\texttt{has\_processed\_used} until the device writes a completion entry into
+the used ring, after which \texttt{dequeue} reclaims the descriptors and returns
+the \texttt{VirtTokens} to the caller.
+
+Figure~\ref{fig:virtio_pci_sequence_irq} shows the same lifecycle with MSI-X
+interrupts substituted for busy-polling.  The initialization phase extends with
+three additional steps: \texttt{enable\_msix} configures the PCI MSI-X capability
+and returns the available vector count; \texttt{Events::subscribe} registers a
+completion callback in the IncludeOS event system and returns an event number;
+and \texttt{setup\_msix\_vector} binds that interrupt vector to the request
+queue.  On the I/O path the spin loop is replaced by a \texttt{HLT} instruction
+that suspends the vCPU until the device fires a MSI-X interrupt, which the
+hypervisor delivers as a virtual interrupt and IncludeOS dispatches to the
+registered callback.  Interrupt-driven completion frees the virtual processor for
+other work at the cost of additional context-switch latency compared with the
+polling model.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.90\linewidth]{virtio_pci_sequence_irq.png}
+  \caption{Sequence diagram of the interrupt-driven (MSI-X) variant.
+    Compared with Figure~\ref{fig:virtio_pci_sequence}, the initialization phase
+    adds \texttt{enable\_msix}, \texttt{Events::subscribe}, and
+    \texttt{setup\_msix\_vector} calls; the busy-poll spin is replaced by a
+    \texttt{HLT} sleep and a \texttt{MSI-X IRQ} wakeup arrow from the device.}
+  \label{fig:virtio_pci_sequence_irq}
+\end{figure}
 
 % ════════════════════════════════════════════════════════════════════════════
 %  CHAPTER 4 — IMPLEMENTATION
@@ -845,6 +851,8 @@ resolution and a direct driver call.
 \section{Virtio PCI Layer}
 \label{sec:impl-virtio}
 
+% This entire section is entirely to dense and difficult to read. I need to add diagrams for better explaining these different things in a more concise manner. 
+
 The constructor validates vendor ID (\texttt{PCI::VENDOR\_VIRTIO}) and product
 ID --- 0x1040--0x107F for modern devices; 0x1000--0x103F legacy devices are
 rejected.  Capability discovery follows \texttt{cap\_next} links checking for
@@ -922,6 +930,26 @@ available ring's \texttt{flags} field, requesting that the device refrain from
 sending completion interrupts.  \texttt{unsuppress()} clears this by writing
 \texttt{VIRTQ\_AVAIL\_F\_INTERRUPT}, re-enabling interrupt delivery.
 
+\texttt{enable\_msix(uint8\_t required\_msix\_count)} activates MSI-X interrupt
+delivery for the device.  When \texttt{required\_msix\_count} is greater than
+zero, the method sets the internal \texttt{\_msix\_enabled} flag and calls
+\texttt{\_pcidev.probe\_resources()} followed by
+\texttt{\_pcidev.parse\_capabilities()} to enumerate PCI BARs and locate the
+MSI-X capability structure.  It asserts that \texttt{msix\_cap() > 0}, meaning
+the device advertises MSI-X support, then calls \texttt{\_pcidev.init\_msix()} to
+write the MSI-X enable bit in the capability header and \texttt{get\_msix\_vectors()}
+to read back the number of vectors the device provides.  A further assertion
+verifies that the available vector count meets the requested minimum.  The return
+value is the actual vector count, which the caller may use to bind individual
+queues.  On the \texttt{Split\_queue} side, \texttt{setup\_msix\_vector(queue\_idx,
+vector)} writes the allocated vector number into \texttt{queue\_msix\_vector}
+inside \texttt{virtio\_pci\_common\_cfg}, binding a specific MSI-X interrupt line
+to that queue's completion events.  The driver pairs this with
+\texttt{Events::get().subscribe(callback)}, which registers a callback in the
+IncludeOS event system and returns an \texttt{event\_num}; passing
+\texttt{IRQ\_BASE + event\_num} as the vector argument connects the hardware
+interrupt directly to the callback without polling.
+
 \section{VirtioFS Device Driver}
 \label{sec:impl-virtiofs}
 
@@ -978,6 +1006,11 @@ Virtio descriptor chains with no intermediate copy.
   \label{fig:write_chain}
 \end{figure}
 
+% I hate the colors
+% Also, maybe structs 
+
+% Things are sort of hacked several places hmm. Should I really clean up and the repos?
+
 The scatter-gather variants \texttt{readv} and \texttt{writev} append one
 \texttt{VirtToken} per \texttt{iovec} element, exploiting descriptor chaining to
 fill or drain discontiguous caller buffers with no aggregation buffer.
@@ -989,14 +1022,6 @@ fill or drain discontiguous caller buffers with no aggregation buffer.
 --- all offset state is authoritative in the driver.  \texttt{unlink} issues
 \texttt{FUSE\_UNLINK} with the path pointer offset by one byte to strip the
 leading separator added by the VFS layer.
-
-Driver registration is performed by a file-scope constructor annotated with
-\texttt{\_\_attribute\_\_((constructor))}, calling
-\texttt{hw::PCI\_manager::register\_vfs} with vendor ID \texttt{VENDOR\_VIRTIO}
-and product ID 0x105a, supplying \texttt{VirtioFS\_device::new\_instance} as the
-factory.  At boot, the PCI manager invokes this factory for any matching device,
-triggering the full three-phase initialization.  This requires no modification to
-the existing PCI enumeration code.
 
 % ════════════════════════════════════════════════════════════════════════════
 %  CHAPTER 5 — EVALUATION
@@ -1019,62 +1044,84 @@ results, and analysis for each research question in turn.
 All experiments are executed inside virtual machines managed by QEMU/KVM on the
 same host workstation, ensuring that CPU microarchitecture and memory topology
 are constant across every run.  A shared host directory is exposed to the guest
-through VirtioFS, the primary transport under evaluation; no virtual block device
-is involved.  The host directory itself is mounted on a \texttt{tmpfs} ramdisk
-so that host-side storage latency and caching effects are eliminated from the
-measurements.
+through VirtioFS, the primary transport under evaluation. The host directory itself is mounted on a \textbf{tmpfs} ramdisk so that host-side storage latency and caching effects are eliminated from the measurements. The VirtioFS daemon is launched with direct I/O passthrough (\textbf{---allow-direct-io}) for guest and daemon caching disabled (\textbf{---cache never}).
 
-Two guest operating environments are used:
+\textbf{IncludeOS} machines run with a single virtual processor and 3 gibibytes of ram. Benchmark code and IncludeOS are linked and bundled into a bootable image. The experiments are executed with two VirtioFS driver configurations:
 
-\begin{description}
-  \item[IncludeOS guest.]  The IncludeOS unikernel is launched directly by the
-    \texttt{boot} utility (part of the IncludeOS toolchain), which invokes
-    \texttt{qemu-system-x86\_64} with hardware-virtualisation
-    (\texttt{-enable-kvm}) and 3~GiB of memory.  No full operating system is
-    present: the benchmark binary \emph{is} the unikernel image, linked with
-    the IncludeOS runtime and its VirtioFS driver.  The VirtioFS device is
-    configured directly through a JSON configuration file passed to \texttt{boot}.
+\paragraph{Polling.} After submitting a request to the VirtioFS virtqueue, the
+IncludeOS driver busy-polls the used-ring until the host returns
+a completion.  No interrupt is taken and the vCPU never halts.
 
-  \item[Linux guest.]  An Ubuntu 24.04 server image runs inside QEMU with KVM
-    enabled, 8~GiB of memory, and four virtual CPUs (\texttt{-smp 4}).  Host
-    memory is allocated via \texttt{memfd} and shared with the guest
-    (\texttt{memory-backend-memfd, share=on}).  The VirtioFS device is backed by
-    the userspace \texttt{virtiofsd} daemon (\texttt{vhost-user-fs-pci}),
-    launched on the host before QEMU starts.  \texttt{virtiofsd} is configured
-    with direct I/O (\texttt{--allow-direct-io}) and caching disabled
-    (\texttt{--cache never}) to prevent daemon-side buffering from masking driver
-    latency.
-\end{description}
+\begin{lstlisting}[caption=Busy-polling,style=chstyle,language=C]
+_req.enqueue(tokens);
+while(_req.has_processed_used()); // Busy-polling
+_req.dequeue();
+\end{lstlisting}
 
-Two distinct notification mechanisms are exercised in the IncludeOS experiments:
+\paragraph{IRQ (MSI-X).} After submission, the vCPU executes a \texttt{HLT}
+instruction and sleeps until a MSI-X interrupt from the VirtioFS device
+signals completion. We register a dummy function as the deferred callback routine for the request virtqueue. Using interrupts frees the virtual processor for other work, reduces energy and CPU utilization, but introduces extra latency compared to busy-polling.
 
-\begin{description}
-  \item[Polling.]  After submitting a request to the VirtioFS virtqueue, the
-    IncludeOS driver busy-polls the used-ring descriptor until the host returns
-    a completion.  No interrupt is taken; the vCPU never halts.
+\begin{lstlisting}[caption=VirtioFS deferred interrupt setup,style=chstyle,language=C]
+// VirtioFS init function
+_control.enable_msix(1);
+auto event_num = Events::get().subscribe(
+  {this, &VirtioFS_device::_fuse_log_reply}
+);
+d.setup_msix_vector(0, IRQ_BASE + event_num);
+_control.set_driver_ok_bit();
 
-  \item[IRQ (MSI-X).]  After submission, the vCPU executes a \texttt{HLT}
-    instruction and sleeps until a MSI-X interrupt from the VirtioFS device
-    signals completion.  This frees the vCPU for other work but introduces
-    interrupt-delivery latency on every I/O.
-\end{description}
+// Enable_msix function
+uint8_t Virtio_control::enable_msix(uint8_t required_msix_count) {
+  if (required_msix_count > 0) {
+    _msix_enabled = true;
 
-\subsection{Reproducible Builds with Nix}
+    /* Grabbing PCI resources. Dependency for MSIX code */
+    _pcidev.probe_resources();
+    _pcidev.parse_capabilities();
+
+    /* Checking for the availablity of MSIX capability */
+    bool supports_msix = _pcidev.msix_cap() > 0;
+    CHECK(supports_msix, "Device supports MSIX!");
+    _virtio_panic(supports_msix);
+
+    /* Driver requires required_msix_count # of vectors */
+    _pcidev.init_msix();
+    uint8_t msix_vector_count = _pcidev.get_msix_vectors();
+    bool sufficient_msix_count = msix_vector_count >= required_msix_count;
+    CHECK(sufficient_msix_count, "Sufficient msix vector count (%d)", msix_vector_count);
+    _virtio_panic(sufficient_msix_count);
+
+    return msix_vector_count;
+  }
+
+// Split queue setting the MSI-X vector
+cfg.queue_msix_vector = VIRTIO_MSI_NO_VECTOR;
+\end{lstlisting}
+
+% TODO: Add how this works with my Virtio stuff :) (code listing)
+
+\textbf{Linux} machines execute with four virtual processors and 8 gibibytes of ram. The machines run with more resources to reduce the scheduling and memory pressure from other processes running on the system. The benchmark processes run with minimal interference.
+
+\subsection{Timing}
+
+All benchmarks use the same \textbf{chrono::high\_resolution\_clock} clock in C++ for timestamps. The benchmarks calculate the time delta before and after the function to be timed.
+
+\subsection{Reproducible Builds}
 
 All benchmark programs are compiled with the Nix package manager to guarantee
-bit-for-bit reproducibility across machines.  A top-level \texttt{shell.nix}
-provides the build environment and runtime dependencies --- including
-\texttt{virtiofsd}, QEMU, GRUB, and the IncludeOS VM-runner utility --- through
-a single \texttt{nix-shell} invocation.
+bit-for-bit reproducibility across machines.
 
 IncludeOS unikernel binaries are built with
 \texttt{includeos.stdenv.mkDerivation}; the resulting
-\texttt{virtiofs\_bench.elf.bin} ELF image is passed directly to the
+\texttt{virtiofs\_bench.elf.bin} image is passed directly to the
 \texttt{boot} launcher.  Linux binaries are compiled with the \texttt{pkgsMusl}
-static C library toolchain to minimise runtime dependencies and prevent dynamic
-linker behaviour from confounding results.  The C++20 standard is required by
-all benchmarks for \texttt{std::format} and
-\texttt{std::chrono::high\_resolution\_clock}.
+static C library toolchain to minimize runtime dependencies and prevent dynamic
+linker behavior from confounding results.
+
+\subsection{Host machine}
+
+The machine is \texttt{Lenovo LOQ 15AHP10} laptop running a \texttt{AMD Ryzen 7 250 (8 cores and 16 threads)} with 32GiB of RAM. The host operating system is \textbf{Debian 13 (Trixie)} with the kernel version \textbf{6.12.63}.
 
 \subsection{POSIX I/O Benchmark (Experiments 1 \& 2)}
 \label{sec:posix_setup}
@@ -1082,56 +1129,48 @@ all benchmarks for \texttt{std::format} and
 The synchronous-I/O benchmark exercises VirtioFS through the standard POSIX file
 API (\texttt{open}/\texttt{read}/\texttt{write}/\texttt{lseek}/\texttt{close}).
 In IncludeOS this translates directly into driver calls with no kernel syscall
-boundary; in Linux the calls traverse the VFS and FUSE layers before reaching
+boundary; in Linux the calls traverse the VFS and protections mechanims before reaching
 the \texttt{virtiofsd}-backed driver.
 
-\paragraph{Test file.}  A 204.8~MiB binary file
-(\texttt{syncio\_testing\_file.bin}) pre-placed on the shared \texttt{tmpfs}
-serves as the read source.  Write benchmarks create a fresh output file on each
-run and remove it afterwards to prevent caching warm-up from propagating across
-runs.  Files are opened with \texttt{O\_DIRECT} to bypass the page cache.
+A 200~MiB binary file (\texttt{syncio\_testing\_file.bin}) pre-placed on the shared \texttt{tmpfs}
+serves as the read source. Write benchmarks create a fresh output file on each
+run and remove it afterwards. Files are opened with \texttt{O\_DIRECT} to bypass the page cache.
 
-\paragraph{Chunk sweep.}  The benchmark iterates over chunk sizes from 8~KiB to
+The benchmark iterates over chunk sizes from 8~KiB to
 248~KiB in steps of 8~KiB (31 sizes).  For each chunk size 30 independent runs
 are executed.  Four access patterns are measured: \emph{sequential read},
 \emph{sequential write}, \emph{random read}, and \emph{random write}.  The
 random benchmarks permute chunk indices with a fixed seed (Mersenne Twister,
 seed 42).
 
-\paragraph{Timing.}  Each run is timed with
-\texttt{std::chrono::high\_resolution\_clock}, wrapping the innermost processing
-loop.  The result is recorded as elapsed time in milliseconds and as throughput
-in mebibytes per second (MiB/s), computed as
-$\text{filesize} / \text{elapsed}$.
+Each run calculates the time delta of the innermost processing
+loop. The result is recorded as elapsed time in milliseconds and as throughput
+in mebibytes per second (MiB/s), computed as $\text{filesize} / \text{elapsed}$.
 
 \subsection{io\_uring Benchmark (Experiment 3)}
 \label{sec:iouring_setup}
 
-The io\_uring benchmark uses the same access patterns and file sizes as the POSIX
-benchmark but replaces the synchronous system calls with the \texttt{liburing}
-asynchronous interface configured with the \texttt{IORING\_SETUP\_SQPOLL} flag.
-SQPOLL spawns a kernel thread that polls the submission queue without requiring a
-\texttt{io\_uring\_enter} system call from the application, theoretically
-reducing syscall overhead at high submission rates.  The submission queue depth
-is set to 1; a single outstanding I/O is submitted and waited upon before the
-next is issued, matching the serialised access pattern of the POSIX benchmark.
-This benchmark runs only on Linux; IncludeOS does not support io\_uring.
+The io\_uring benchmark is equivalent to POSIX with applied io\_uring patches. The submission queue depth is set to 1; a single outstanding I/O is submitted and waited upon before the next is issued, matching the serialized access pattern of the POSIX benchmark. io\_uring is configured with a polling kernel thread using \texttt{IORING\_SETUP\_SQPOLL}. This spawns a kernel thread that polls the submission queue without requiring a \texttt{io\_uring\_enter} system call from the application. This benchmark runs only on Linux. 
 
 \subsection{C63 Video Decoder Benchmark}
 \label{sec:c63dec_setup}
 
-The c63 codec is a simplified MPEG-style video codec developed for educational
-purposes.  The decoder \texttt{c63dec} reads a compressed \texttt{.c63} file
+The c63 codec is a simplified video codec developed for educational
+purposes. C63 uses buffered file I/O that calls vectorized I/O.
+
+The decoder \texttt{c63dec} reads a compressed \texttt{.c63} file
 from the VirtioFS-mounted directory and writes the decoded raw YUV frames back
 to the same directory, exercising both the read and write paths of the VirtioFS
 driver under a realistic, compute-bound workload.
 
-The input file is a 51-frame WWE broadcast stream (\texttt{wwe.c63}) of limited
-resolution.  The entire decode-and-write sequence is timed with
+The input file is a 60-frame encoded of West Wind Easy (\texttt{wwe.c63}).
+The entire decode-and-write sequence is timed with
 \texttt{std::chrono::high\_resolution\_clock} and repeated 30 times per system
 configuration.  Run~0 is treated as a cold-start observation and excluded from
 statistical analysis; runs~1--29 are used to compute means and confidence
 intervals.
+
+% A custom stack allocator is used to 
 
 Three system configurations are compared: Linux, IncludeOS Polling, and
 IncludeOS IRQ.
@@ -1158,13 +1197,13 @@ Figure~\ref{fig:rq1_peak} summarises peak throughput as a bar chart.
   \label{fig:rq1_combined}
 \end{figure}
 
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=\linewidth]{rq1_peak_bar.pdf}
-  \caption{RQ1 -- Peak throughput comparison for sequential (left) and random
-    (right) I/O across the three system configurations.}
-  \label{fig:rq1_peak}
-\end{figure}
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width=\linewidth]{rq1_peak_bar.pdf}
+%   \caption{RQ1 -- Peak throughput comparison for sequential (left) and random
+%     (right) I/O across the three system configurations.}
+%   \label{fig:rq1_peak}
+% \end{figure}
 
 \paragraph{IncludeOS Polling vs.\ Linux POSIX.}
 IncludeOS Polling achieves the highest throughput across every access pattern and
@@ -1204,14 +1243,6 @@ little additional gain from larger transfers.  This plateau reflects the
 saturation of the underlying \texttt{tmpfs} memory bandwidth.  The plateau for
 IncludeOS Polling, however, sits roughly twice as high as that for Linux POSIX.
 
-\paragraph{Result variance.}
-Both IncludeOS configurations exhibit markedly lower coefficient of variation
-(CV) than Linux POSIX.  For sequential reads, IncludeOS Polling has CV~=~1.40\%
-and IncludeOS IRQ has CV~=~1.70\%, compared with CV~=~5.31\% for Linux POSIX.
-The reduced variance reflects the deterministic execution model of the unikernel:
-there is no scheduler preemption, no page-fault handling, and no background
-kernel activity competing for CPU cycles.
-
 \subsection{Analysis}
 
 The throughput advantage of IncludeOS over Linux can be attributed to three
@@ -1220,22 +1251,10 @@ structural differences:
 \begin{enumerate}
   \item \textbf{No syscall overhead.}  In IncludeOS, a call to \texttt{read()}
     or \texttt{write()} dispatches directly to the VirtioFS driver without a
-    privilege-level switch.  In Linux, every POSIX call traverses the
-    \texttt{syscall} entry stub, VFS \texttt{vfs\_read}/\texttt{vfs\_write}, and
-    then the FUSE file-system layer, which forwards the request to
-    \texttt{virtiofsd} in user space via a shared ring buffer --- itself
-    requiring a further context switch.
-
-  \item \textbf{No FUSE protocol overhead.}  Linux VirtioFS is implemented on
-    top of the kernel FUSE framework.  Every data transfer is wrapped in a FUSE
-    request header, routed through the FUSE device, and unpacked by
-    \texttt{virtiofsd}.  IncludeOS communicates directly with the VirtioFS
-    virtqueue without any FUSE framing.
+    privilege-level switch and additional layers.
 
   \item \textbf{Absence of OS interference.}  As a unikernel, IncludeOS runs a
-    single cooperative task.  There are no timer interrupts, no background kernel
-    threads, no memory-pressure events, and no scheduler preemption during the
-    benchmark.
+    single cooperative task. There is no scheduler preemption overhead during the benchmark.
 \end{enumerate}
 
 \textbf{Answer to RQ1:} Yes.  The IncludeOS VirtioFS implementation achieves
@@ -1294,37 +1313,17 @@ contextualise these findings relative to the IncludeOS baselines.
 
 \subsection{Analysis}
 
-\paragraph{VirtioFS is not a native io\_uring target.}  The Linux VirtioFS
-driver sits inside the kernel's FUSE layer, which ultimately forwards requests to
-\texttt{virtiofsd} in user space.  Even though the application avoids the
-\texttt{read}/\texttt{write} syscall entry through SQPOLL, the kernel I/O path
-itself remains synchronous with respect to the daemon: io\_uring does not provide
-a path to bypass the FUSE round-trip.
-
-\paragraph{SQPOLL thread contention.}  The \texttt{IORING\_SETUP\_SQPOLL} flag
-spawns a dedicated kernel thread that continuously polls the submission queue.
-This thread consumes a hardware thread at all times, competing with the
-\texttt{virtiofsd} processing thread and the application thread itself ---
-increasing cache pressure and reducing the effective CPU available to forward I/O.
-
 \paragraph{Queue depth of 1.}  The benchmark deliberately maintains a single
-outstanding I/O at a time.  SQPOLL provides its greatest benefit at high queue
+outstanding I/O at a time. SQPOLL provides its greatest benefit at high queue
 depths where many I/O operations can be batched into the submission ring with a
-single kernel notification.  At depth 1 the overhead of ring management is
-incurred for every single operation without amortisation.
-
-\paragraph{Structural gap remains.}  Even if SQPOLL overhead were eliminated,
-the FUSE protocol and \texttt{virtiofsd} round-trip would remain.  The root
-causes of Linux's throughput gap relative to IncludeOS are architectural.
-Closing this gap would require kernel modifications such as a native
-kernel-space VirtioFS driver operating outside FUSE.
+single kernel notification. At depth 1 the overhead of ring management is
+incurred for every single operation without amortization.
 
 \textbf{Answer to RQ2:}  The throughput gap between Linux and IncludeOS is
 caused by the multiple software layers interposed between the application and the
 VirtioFS virtqueue: system calls, the VFS, FUSE framing, and the
 \texttt{virtiofsd} user-space daemon.  Replacing synchronous POSIX calls with
-io\_uring SQPOLL does not close this gap; on the contrary, at queue depth~1 with
-a FUSE-backed filesystem, SQPOLL introduces a throughput regression of 9--38\%
+io\_uring SQPOLL does not close this gap; on the contrary, at queue depth~1 with VirtioFS, SQPOLL introduces a throughput regression of 9--38\%
 compared with ordinary POSIX I/O.
 
 \section{RQ3 -- Impact on Video Decoding}
@@ -1336,8 +1335,9 @@ tasks such as video decoding?}
 \subsection{Results}
 
 Figure~\ref{fig:rq3_box} shows a box plot of decode times (runs 1--29) for the
-three system configurations.  Figure~\ref{fig:rq3_bar} presents means with 95\%
-confidence intervals and speedup annotations relative to Linux.
+three system configurations.
+
+% Figure~\ref{fig:rq3_bar} presents means with 95\% confidence intervals and speedup annotations relative to Linux.
 
 \begin{figure}[htbp]
   \centering
@@ -1348,13 +1348,22 @@ confidence intervals and speedup annotations relative to Linux.
   \label{fig:rq3_box}
 \end{figure}
 
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.7\linewidth]{rq3_c63dec_bar.pdf}
-  \caption{RQ3 -- Mean c63 decode time $\pm$ 95\% CI\@.  Speedup labels above
-    the IncludeOS bars are relative to the Linux mean.}
-  \label{fig:rq3_bar}
-\end{figure}
+% I will also make a benchmark where I will interleave
+
+% Reference the part of IRQ to 
+
+% Mention that vectorized I/O is used here.
+% Calculate how much of the time is actually decoding versus I/O
+% This can be done by
+% Throughput out
+
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width=0.7\linewidth]{rq3_c63dec_bar.pdf}
+%   \caption{RQ3 -- Mean c63 decode time $\pm$ 95\% CI\@.  Speedup labels above
+%     the IncludeOS bars are relative to the Linux mean.}
+%   \label{fig:rq3_bar}
+% \end{figure}
 
 \begin{table}[htbp]
   \centering
@@ -1376,9 +1385,7 @@ confidence intervals and speedup annotations relative to Linux.
 \paragraph{IncludeOS Polling.}
 IncludeOS Polling achieves a mean decode time of \textbf{3.759~s}, compared with
 \textbf{4.861~s} for Linux POSIX --- a speedup of $\times$\textbf{1.29}, or a
-\textbf{22.7\% reduction} in wall-clock decode time.  IncludeOS Polling also
-exhibits the lowest variance of any configuration: a standard deviation of just
-\textbf{0.015~s} (CV~=~0.4\%) versus \textbf{0.032~s} (CV~=~0.7\%) for Linux.
+\textbf{22.7\% reduction} in wall-clock decode time.
 
 \paragraph{IncludeOS IRQ.}
 IncludeOS IRQ reduces decode time to \textbf{4.096~s}, a $\times$\textbf{1.19}
@@ -1410,8 +1417,7 @@ scaled by the Amdahl factor of the non-I/O fraction.
 \textbf{Answer to RQ3:}  The higher I/O throughput of the IncludeOS VirtioFS
 implementation translates directly into faster end-to-end execution of a
 realistic video decoding task.  IncludeOS Polling completes decoding
-\textbf{22.7\% faster} than Linux POSIX, with a \textbf{threefold reduction in
-timing variance}.  The unikernel also eliminates the significant cold-start
+\textbf{22.7\% faster} than Linux POSIX. The unikernel also eliminates the significant cold-start
 penalty observed on Linux, making every execution faster and more predictable.
 
 \section{Threats to Validity}
@@ -1435,7 +1441,7 @@ less I/O-bound.
 \paragraph{Reproducibility.}
 All experiments use Nix-pinned dependency graphs; the build and runtime
 environments are fully reproducible.  Nevertheless, results may differ on
-hardware with different DRAM bandwidth, CPU microarchitecture, or hypervisor
+hardware with different DRAM bandwidth, CPU microarchitecture, host or KVM
 implementation.
 
 % ════════════════════════════════════════════════════════════════════════════
@@ -1455,28 +1461,21 @@ polling mode, peak throughput exceeds Linux POSIX by $\times$1.74--1.84 across
 sequential and random patterns, and by up to $\times$3.02 at small chunk sizes
 where per-request overhead dominates.  Even the interrupt-driven MSI-X mode
 outperforms Linux by $\times$1.26--1.53.  The advantage stems from the structural
-simplicity of the unikernel: the absence of a kernel boundary, VFS dispatch,
-FUSE framing, and a user-space daemon reduces every I/O to a near-direct transfer
-to the VirtioFS virtqueue.
+simplicity of the unikernel: the absence of a kernel boundary, simple VFS dispatch and no permission checking.
 
 Regarding \textbf{RQ2}, the investigation into Linux-side optimisations via
 io\_uring SQPOLL produced a counterintuitive result: SQPOLL \emph{degrades}
-VirtioFS throughput by 9--38\% relative to ordinary POSIX I/O.  The regression
-arises because the FUSE-backed VirtioFS kernel driver cannot benefit from
-io\_uring's submission-batching model --- each I/O still incurs a synchronous
-round-trip to \texttt{virtiofsd} --- while the SQPOLL kernel thread introduces
-additional CPU contention.  Closing the performance gap with IncludeOS on Linux
-would require a kernel-level redesign of the VirtioFS stack, such as moving the
-driver out of the FUSE layer and into a dedicated in-kernel implementation.
+VirtioFS throughput by 9--38\% relative to ordinary POSIX I/O. The cause of the regression is not known, and must be investigated further.
+% TODO: Write more here...
 
 Regarding \textbf{RQ3}, the end-to-end c63 video decoder benchmark shows that
 the I/O throughput advantage of IncludeOS translates into meaningful
 application-level gains.  IncludeOS Polling completes decoding 22.7\% faster
-than Linux with three times lower timing variance.  Notably, IncludeOS
-completely eliminates the 25.3\% cold-start penalty observed on Linux, making
-unikernel execution faster from the very first run --- a property particularly
-valuable in short-lived, function-as-a-service deployments where cold-start
-latency directly affects user experience.
+than Linux. Notably, IncludeOS completely eliminates the 25.3\% cold-start penalty observed on Linux, making unikernel execution faster from the very first run.
+
+% --- a property particularly valuable in short-lived, function-as-a-service deployments where cold-start latency directly affects user experience.
+
+% Indetermined whether this is a one time occurance or not.
 
 Taken together, these findings validate the motivation for implementing VirtioFS
 in a unikernel: the removal of general-purpose OS abstractions that are
@@ -1490,14 +1489,7 @@ Several directions remain open for investigation:
 \begin{itemize}
   \item \textbf{Higher io\_uring queue depths.}  The RQ2 benchmark deliberately
     used queue depth~1 to match the serialized POSIX baseline.  Evaluating
-    io\_uring at depths of 4, 8, 32, or higher could amortise SQPOLL overhead
-    and reveal whether concurrent submission changes the picture for
-    FUSE-backed VirtioFS.
-
-  \item \textbf{Multi-threaded virtqueue access.}  IncludeOS currently uses a
-    single-threaded, cooperative execution model.  Extending the VirtioFS driver
-    to support multiple virtqueues and concurrent I/O would be relevant as
-    IncludeOS gains multi-core support.
+    io\_uring at depths of 4, 8, 32, or higher could reveal whether concurrent submission changes the picture.
 
   \item \textbf{Persistent storage backends.}  All benchmarks in this thesis used
     a \texttt{tmpfs} ramdisk on the host to eliminate disk latency from the
@@ -1506,17 +1498,10 @@ Several directions remain open for investigation:
     constraints, and whether the FUSE round-trip cost is dominated by device
     latency in that regime.
 
-  \item \textbf{Kernel-space VirtioFS for Linux.}  A native in-kernel VirtioFS
-    driver that bypasses the FUSE layer entirely would remove the primary source
-    of Linux's throughput deficit.  Prototyping such a driver and measuring its
-    overhead relative to the IncludeOS implementation would quantify how much of
-    the gap is fundamental to general-purpose OS semantics versus incidental to
-    the FUSE indirection.
-
-  \item \textbf{Production codec workloads.}  The c63 codec is an educational
+  \item \textbf{Production codec workloads.}  The c63 decoder is an educational
     tool with limited resolution and frame rate.  Benchmarking with production
     codecs such as FFmpeg decoding H.264 or AV1 content would provide more
-    ecologically valid evidence of the application-level impact.
+    valid evidence of the application-level impact.
 \end{itemize}
 
 % ════════════════════════════════════════════════════════════════════════════
@@ -1551,35 +1536,6 @@ QEMU project,
 ``Vhost-user protocol specification,''
 2024.
 \url{https://qemu-project.gitlab.io/qemu/interop/vhost-user.html}
-
-\bibitem{virtio2024}
-OASIS,
-\textit{Virtual I/O Device (VIRTIO) Version 1.3},
-OASIS Standard, 2024.
-\url{https://docs.oasis-open.org/virtio/virtio/v1.3/virtio-v1.3.html}
-
-\bibitem{fuse2024}
-M.~Szeredi,
-``FUSE: Filesystem in Userspace,''
-Linux kernel documentation, 2024.
-\url{https://www.kernel.org/doc/html/next/filesystems/fuse.html}
-
-\bibitem{goyal2020}
-V.~Goyal et al.,
-``Virtio-fs: A shared file system for virtual machines,''
-in \textit{Proc.\ USENIX ATC}, 2020.
-\url{https://virtio-fs.gitlab.io}
-
-\bibitem{bratterud2015}
-A.~Bratterud et al.,
-``IncludeOS: A minimal, resource efficient unikernel for cloud services,''
-in \textit{Proc.\ IEEE CloudCom}, Vancouver, 2015, pp.~250--257.
-
-\bibitem{musl2024}
-R.~Fellows et al.,
-``musl libc,''
-2024.
-\url{https://musl.libc.org}
 
 \end{thebibliography}
 
