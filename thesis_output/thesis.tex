@@ -451,6 +451,18 @@ comparing \texttt{\_used\_ring->idx} against its locally maintained
   \label{fig:used_expose}
 \end{figure}
 
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\linewidth]{desc_chain.png}
+  \caption{Descriptor chaining: the \texttt{Next} field of descriptor~0
+           (head, placed in \texttt{avail.ring[0]}) points to descriptor~1,
+           which in turn points to descriptor~2 (end of chain, no
+           \texttt{NEXT} flag).  The device processes all three as a single
+           logical scatter-gather buffer; the used ring returns the head
+           index~0 on completion.}
+  \label{fig:desc_chain}
+\end{figure}
+
 \subsubsection{Notification Mechanisms}
 
 Both sides can suppress notifications.  The driver sets
@@ -965,6 +977,16 @@ driver's minimum.  \texttt{max\_write} is stored reduced by
 \texttt{FUSE\_BUFFER\_HEADER\_SIZE} (4096 bytes).  Finally an
 \texttt{fs::Filesystem} struct is registered under \texttt{VirtioFS\{id\}}.
 
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.90\linewidth]{init_chain.png}
+  \caption{FUSE init chain: \texttt{virtio\_fs\_init\_req} carrying
+    \texttt{fuse\_in\_header} and \texttt{fuse\_init\_in} (readable) |
+    \texttt{fuse\_out\_header} and \texttt{fuse\_init\_out} with negotiated
+    version and \texttt{max\_write} (writable).}
+  \label{fig:init_chain}
+\end{figure}
+
 \subsection{Inode Resolution}
 
 \texttt{\_lookup\_inode} sends a three-token \texttt{FUSE\_LOOKUP} chain:
@@ -972,6 +994,16 @@ request header (readable) | null-terminated path (readable) | response buffer
 (writable).  The returned inode number, file handle, and seek offset are stored
 in \texttt{\_fd\_info\_map} keyed by the POSIX descriptor integer, eliminating
 repeated lookups for an open file.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.90\linewidth]{lookup_chain.png}
+  \caption{FUSE lookup chain: \texttt{virtio\_fs\_lookup\_req} with parent
+    \texttt{nodeid} (readable) | null-terminated filename (readable) |
+    \texttt{fuse\_out\_header} and \texttt{fuse\_entry\_out} with child inode
+    attributes (writable).}
+  \label{fig:lookup_chain}
+\end{figure}
 
 \subsection{Open, Create, and Close}
 
@@ -982,6 +1014,38 @@ combining lookup and open in one round-trip.  \texttt{close} sends
 \texttt{FUSE\_RELEASE} on the request queue, removes the descriptor from
 \texttt{\_fd\_info\_map}, then sends \texttt{FUSE\_FORGET} on the high-priority
 queue to promptly decrement the daemon's inode reference count.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.90\linewidth]{open_chain.png}
+  \caption{FUSE open chain: \texttt{virtio\_fs\_open\_req} carrying
+    \texttt{fuse\_in\_header} and \texttt{fuse\_open\_in} (readable) |
+    \texttt{fuse\_out\_header} and \texttt{fuse\_open\_out} with file handle
+    and open flags (writable).}
+  \label{fig:open_chain}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.90\linewidth]{create_chain.png}
+  \caption{FUSE create chain: \texttt{virtio\_fs\_create\_req} with
+    \texttt{fuse\_create\_in} (readable) | null-terminated filename (readable)
+    | \texttt{fuse\_out\_header}, \texttt{fuse\_entry\_out}, and
+    \texttt{fuse\_open\_out} combined in one writable descriptor, delivering
+    both inode attributes and a file handle in a single round-trip.}
+  \label{fig:create_chain}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.90\linewidth]{release_chain.png}
+  \caption{FUSE release (close) chain: \texttt{virtio\_fs\_release\_req}
+    carrying \texttt{fuse\_release\_in} with the file handle and flags
+    (readable) | \texttt{fuse\_out\_header} with error status only (writable).
+    After the response the descriptor is removed from \texttt{\_fd\_info\_map}
+    and \texttt{FUSE\_FORGET} is sent on the high-priority queue.}
+  \label{fig:release_chain}
+\end{figure}
 
 \subsection{Read and Write}
 
@@ -1006,22 +1070,68 @@ Virtio descriptor chains with no intermediate copy.
   \label{fig:write_chain}
 \end{figure}
 
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.90\linewidth]{readv_chain.png}
+  \caption{FUSE vectorised read chain: request header (readable) |
+    \texttt{fuse\_out\_header} (writable) | \texttt{iovec[0]} \ldots
+    \texttt{iovec[n-1]} (writable) --- one descriptor per \texttt{iovec}
+    element, allowing the device to scatter output directly into
+    discontiguous caller buffers.}
+  \label{fig:readv_chain}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.90\linewidth]{writev_chain.png}
+  \caption{FUSE vectorised write chain: request header (readable) |
+    \texttt{iovec[0]} \ldots \texttt{iovec[n-1]} (readable) |
+    \texttt{fuse\_write\_out} (writable) --- one descriptor per
+    \texttt{iovec} element, gathering data from discontiguous caller
+    buffers without an aggregation copy.  The combined byte size of all
+    \texttt{iovec} elements must not exceed \texttt{\_max\_write}.}
+  \label{fig:writev_chain}
+\end{figure}
+
 % I hate the colors
-% Also, maybe structs 
+% Also, maybe structs
 
 % Things are sort of hacked several places hmm. Should I really clean up and the repos?
 
 The scatter-gather variants \texttt{readv} and \texttt{writev} append one
 \texttt{VirtToken} per \texttt{iovec} element, exploiting descriptor chaining to
 fill or drain discontiguous caller buffers with no aggregation buffer.
+The combined byte size of all \texttt{iovec} elements must not exceed
+\texttt{\_max\_write}, the negotiated per-request write limit exposed by the
+device; the driver enforces this constraint before constructing the chain so
+that the host never receives a request larger than it has agreed to handle.
 
-\subsection{Seek, Unlink, and Registration}
+\subsection{Seek}
 
 \texttt{lseek} updates \texttt{\_fd\_info\_map}'s offset for
 \texttt{SEEK\_SET} and \texttt{SEEK\_CUR} without issuing any Virtio operations
---- all offset state is authoritative in the driver.  \texttt{unlink} issues
-\texttt{FUSE\_UNLINK} with the path pointer offset by one byte to strip the
-leading separator added by the VFS layer.
+--- all offset state is authoritative in the driver.
+
+\subsection{Unlink}
+
+\texttt{unlink} issues \texttt{FUSE\_UNLINK} with the path pointer offset by
+one byte to strip the leading path separator added by the VFS layer.  The
+descriptor chain uses three entries: the first readable descriptor carries the
+fixed \texttt{fuse\_in\_header} inside \texttt{virtio\_fs\_unlink\_req}; the
+second readable descriptor points to the null-terminated name string (with
+the $+1$ offset applied); the daemon writes back only a
+\texttt{fuse\_out\_header} containing the error code in the single writable
+descriptor.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.90\linewidth]{unlink_chain.png}
+  \caption{FUSE unlink chain: \texttt{virtio\_fs\_unlink\_req} carrying the
+    fixed \texttt{fuse\_in\_header} (readable) | \texttt{name/path} string as a
+    separate readable descriptor (pointer offset $+1$ to strip the leading
+    separator added by the VFS layer) | \texttt{fuse\_out\_header} (writable).}
+  \label{fig:unlink_chain}
+\end{figure}
 
 % ════════════════════════════════════════════════════════════════════════════
 %  CHAPTER 5 — EVALUATION
